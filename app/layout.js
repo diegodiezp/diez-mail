@@ -1,4 +1,10 @@
 import './globals.css';
+import { DM_Sans } from 'next/font/google';
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  display: 'swap',
+});
 
 export const metadata = {
   title: 'Diez Mail',
@@ -20,7 +26,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" className={dmSans.className}>
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#1a1a1a" />
@@ -28,10 +34,6 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Diez Mail" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&display=swap"
-          rel="stylesheet"
-        />
       </head>
       <body className="bg-gallery-bg text-gallery-black font-sans antialiased">
         <div className="min-h-screen">
