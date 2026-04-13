@@ -7,8 +7,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        serif: ['EB Garamond', 'Georgia', 'serif'],
-        sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Helvetica Neue', 'sans-serif'],
+        serif: ['DM Sans', 'sans-serif'],
+        sans: ['DM Sans', 'sans-serif'],
       },
       colors: {
         gallery: {
