@@ -8,7 +8,8 @@ export default function NewCampaignPage() {
   const [subject, setSubject] = useState('');
   const [pdfLink, setPdfLink] = useState('');
   const [bodyTemplate, setBodyTemplate] = useState(
-    `Dear {{first_name}},\n\n\n\nWarm regards,\nDiego\nDiez Gallery`
+    `Dear {{first_name}},\n\n\n\nWarm regards,\nDiego Diez\nDirector of diez\n+ 31 633261845\n
++ 34 648872907`
   );
 
   // Recipients
