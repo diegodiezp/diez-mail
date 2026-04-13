@@ -1,0 +1,203 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
+
+function formatDate(iso) {
+  if (!iso) return '-';
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function TimeAgo({ date }) {
+  if (!date) return <span className="text-gallery-light">-</span>;
+  const now = new Date();
+  const d = new Date(date);
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  let text;
+  if (diffMin < 1) text = 'Just now';
+  else if (diffMin < 60) text = `${diffMin}m ago`;
+  else if (diffHr < 24) text = `${diffHr}h ago`;
+  else if (diffDay < 7) text = `${diffDay}d ago`;
+  else text = formatDate(date);
+
+  return <span title={formatDate(date)}>{text}</span>;
+}
+
+export default function CampaignDetailPage() {
+  const params = useParams();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedEmail, setExpandedEmail] = useState(null);
+
+  useEffect(() => {
+    if (!params.id) return;
+    fetch(`/api/campaigns?id=${params.id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setData(d);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [params.id]);
+
+  if (loading) {
+    return <div className="text-center py-20 text-gallery-light text-sm">Loading campaign data...</div>;
+  }
+
+  if (!data) {
+    return <div className="text-center py-20 text-gallery-light text-sm">Campaign not found.</div>;
+  }
+
+  const { stats, recipients, events } = data;
+
+  // Get events for a specific recipient
+  const getRecipientEvents = (email) =>
+    events
+      .filter((e) => e['Recipient Email'] === email)
+      .sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp));
+
+  return (
+    <div>
+      <a href="/" className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors mb-4 inline-block">
+        ← Back to Campaigns
+      </a>
+
+      <h1 className="font-serif italic text-3xl mb-8">Campaign Detail</h1>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
+        <div className="stat-card">
+          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Sent</div>
+          <div className="text-2xl font-medium tabular-nums">{stats.sent}</div>
+        </div>
+        <div className="stat-card">
+          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Unique Opens</div>
+          <div className="text-2xl font-medium tabular-nums">{stats.uniqueOpens}</div>
+        </div>
+        <div className="stat-card">
+          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Total Opens</div>
+          <div className="text-2xl font-medium tabular-nums">{stats.totalOpens}</div>
+        </div>
+        <div className="stat-card">
+          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Open Rate</div>
+          <div className="text-2xl font-medium tabular-nums">{stats.openRate}%</div>
+        </div>
+        <div className="stat-card">
+          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">PDF Clicks</div>
+          <div className="text-2xl font-medium tabular-nums">{stats.uniqueClicks || 0}</div>
+        </div>
+        <div className="stat-card">
+          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Click Rate</div>
+          <div className="text-2xl font-medium tabular-nums">{stats.clickRate || 0}%</div>
+        </div>
+      </div>
+
+      {/* Recipients table */}
+      <div className="border border-gallery-border bg-gallery-white">
+        <div className="px-5 py-3 border-b border-gallery-border">
+          <span className="text-2xs font-medium uppercase tracking-wider text-gallery-mid">
+            Recipients ({recipients.length})
+          </span>
+        </div>
+
+        {recipients.map((r) => (
+          <div key={r.email} className="border-b border-gallery-border last:border-0">
+            {/* Row */}
+            <div
+              className="flex items-center gap-4 px-5 py-3 cursor-pointer hover:bg-gallery-bg transition-colors"
+              onClick={() => setExpandedEmail(expandedEmail === r.email ? null : r.email)}
+            >
+              {/* Name + email */}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{r.name}</div>
+                <div className="text-2xs text-gallery-mid truncate">{r.email}</div>
+              </div>
+
+              {/* Status */}
+              <div className="flex-shrink-0">
+                {r.opens > 0 ? (
+                  <span className="badge-open">Opened</span>
+                ) : r.sent ? (
+                  <span className="badge-sent">Sent</span>
+                ) : (
+                  <span className="badge-failed">Failed</span>
+                )}
+              </div>
+
+              {/* Opens count */}
+              <div className="text-right w-12 flex-shrink-0">
+                <div className="text-sm font-medium tabular-nums">{r.opens}</div>
+                <div className="text-2xs text-gallery-light">opens</div>
+              </div>
+
+              {/* Clicks count */}
+              <div className="text-right w-12 flex-shrink-0">
+                <div className="text-sm font-medium tabular-nums">{r.clicks || 0}</div>
+                <div className="text-2xs text-gallery-light">clicks</div>
+              </div>
+
+              {/* Device - hidden on mobile */}
+              <div className="text-right w-20 text-2xs text-gallery-mid hidden sm:block flex-shrink-0">
+                {r.devices.join(', ') || '-'}
+              </div>
+
+              {/* Last open - hidden on mobile */}
+              <div className="text-right w-24 text-2xs text-gallery-mid hidden sm:block flex-shrink-0">
+                <TimeAgo date={r.lastOpen} />
+              </div>
+
+              {/* Expand indicator */}
+              <div className="text-gallery-light text-xs w-4 flex-shrink-0">
+                {expandedEmail === r.email ? '−' : '+'}
+              </div>
+            </div>
+
+            {/* Expanded timeline */}
+            {expandedEmail === r.email && (
+              <div className="bg-gallery-bg px-5 py-4 border-t border-gallery-border">
+                <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-3">
+                  Activity Timeline
+                </div>
+                <div className="space-y-2">
+                  {getRecipientEvents(r.email).map((event, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <div className="w-1.5 h-1.5 mt-1.5 rounded-full flex-shrink-0"
+                        style={{
+                          backgroundColor:
+                            event['Event Type'] === 'Open'
+                              ? '#3a7d44'
+                              : event['Event Type'] === 'Sent'
+                                ? '#4a90d9'
+                                : '#d44',
+                        }}
+                      />
+                      <div className="flex-1">
+                        <div className="text-sm">
+                          <span className="font-medium">{event['Event Type']}</span>
+                          {event.Device && (
+                            <span className="text-gallery-mid ml-2">on {event.Device}</span>
+                          )}
+                        </div>
+                        <div className="text-2xs text-gallery-light">{formatDate(event.Timestamp)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

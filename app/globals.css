@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: #c45a3c;
+    color: white;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center px-4 py-2 text-sm font-medium
+      bg-gallery-black text-white rounded-none
+      hover:bg-gallery-dark transition-colors
+      disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center px-4 py-2 text-sm font-medium
+      border border-gallery-border text-gallery-black rounded-none
+      hover:bg-gallery-bg transition-colors
+      disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .input-field {
+    @apply w-full px-3 py-2 text-sm border border-gallery-border
+      bg-gallery-white text-gallery-black rounded-none
+      focus:outline-none focus:border-gallery-black
+      placeholder:text-gallery-light transition-colors;
+  }
+
+  .stat-card {
+    @apply bg-gallery-white border border-gallery-border p-5;
+  }
+
+  .table-header {
+    @apply text-2xs font-medium uppercase tracking-wider text-gallery-mid
+      border-b border-gallery-border pb-2;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 text-2xs font-medium tracking-wide uppercase;
+  }
+
+  .badge-sent {
+    @apply badge bg-blue-50 text-blue-700;
+  }
+
+  .badge-open {
+    @apply badge bg-emerald-50 text-emerald-700;
+  }
+
+  .badge-failed {
+    @apply badge bg-red-50 text-red-700;
+  }
+
+  .badge-client {
+    @apply badge bg-gallery-accent-light text-gallery-accent;
+  }
+
+  .badge-contact {
+    @apply badge bg-gray-100 text-gallery-mid;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d0d0d0;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}
+
+/* Textarea auto-resize helper */
+.auto-resize {
+  field-sizing: content;
+  min-height: 120px;
+}
