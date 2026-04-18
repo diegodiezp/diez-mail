@@ -1,5 +1,6 @@
 import './globals.css';
 import { DM_Sans } from 'next/font/google';
+import NavBar from '@/components/NavBar';
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
@@ -37,25 +38,10 @@ export default function RootLayout({ children }) {
       </head>
       <body className="bg-gallery-bg text-gallery-black font-sans antialiased">
         <div className="min-h-screen">
-          <nav className="border-b border-gallery-border bg-gallery-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
-              <a href="/" className="font-serif text-lg sm:text-xl tracking-wide text-gallery-black">
-                Diez Mail
-              </a>
-              <div className="flex gap-4 sm:gap-8 text-xs sm:text-sm">
-                <a href="/" className="text-gallery-mid hover:text-gallery-black transition-colors">
-                  Campaigns
-                </a>
-                <a href="/campaigns/new" className="text-gallery-mid hover:text-gallery-black transition-colors">
-                  New
-                </a>
-                <a href="/contacts" className="text-gallery-mid hover:text-gallery-black transition-colors">
-                  Contacts
-                </a>
-              </div>
-            </div>
-          </nav>
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">{children}</main>
+          <NavBar />
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+            {children}
+          </main>
         </div>
         <script
           dangerouslySetInnerHTML={{
