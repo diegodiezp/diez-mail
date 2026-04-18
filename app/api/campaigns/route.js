@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCampaigns, getEventsForCampaign } from '@/lib/airtable';
+import { getCampaigns, getCampaign, getEventsForCampaign } from '@/lib/airtable';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +9,11 @@ export async function GET(request) {
     const campaignId = searchParams.get('id');
 
     if (campaignId) {
-      const events = await getEventsForCampaign(campaignId);
+      // Fetch campaign record + events in parallel
+      const [campaign, events] = await Promise.all([
+        getCampaign(campaignId),
+        getEventsForCampaign(campaignId),
+      ]);
 
       // Aggregate stats per recipient
       const recipients = {};
@@ -52,7 +56,6 @@ export async function GET(request) {
           if (event.Device) r.devices.add(event.Device);
         }
 
-        // Capture Person link if available
         if (event.Person?.length && !r.personId) {
           r.personId = event.Person[0];
         }
@@ -61,7 +64,7 @@ export async function GET(request) {
       const recipientList = Object.values(recipients).map((r) => ({
         ...r,
         devices: Array.from(r.devices),
-        clickedUrls: [...new Set(r.clickedUrls)], // deduplicate
+        clickedUrls: [...new Set(r.clickedUrls)],
       }));
 
       const totalSent = recipientList.filter((r) => r.sent).length;
@@ -71,6 +74,13 @@ export async function GET(request) {
       const totalClicks = recipientList.reduce((sum, r) => sum + r.clicks, 0);
 
       return NextResponse.json({
+        // ← NEW: campaign name/subject/status now included
+        campaign: {
+          id: campaign.id,
+          name: campaign.Name || 'Untitled Campaign',
+          subject: campaign.Subject || null,
+          status: campaign.Status || null,
+        },
         stats: {
           sent: totalSent,
           uniqueOpens: totalOpened,
@@ -85,11 +95,10 @@ export async function GET(request) {
       });
     }
 
-    // Fetch all campaigns and all events, then compute stats per campaign
+    // ── All campaigns list ────────────────────────────────────────────────────
     const campaigns = await getCampaigns();
-    const allEvents = await getEventsForCampaign(null); // null = get all events
+    const allEvents = await getEventsForCampaign(null);
 
-    // Group events by campaign ID
     const eventsByCampaign = {};
     for (const event of allEvents) {
       const campIds = event.Campaign;
@@ -100,7 +109,6 @@ export async function GET(request) {
       }
     }
 
-    // Compute stats for each campaign
     const campaignsWithStats = campaigns.map((c) => {
       const events = eventsByCampaign[c.id] || [];
       const emails = {};
