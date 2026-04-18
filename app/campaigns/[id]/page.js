@@ -57,7 +57,6 @@ export default function CampaignDetailPage() {
       .catch(() => setLoading(false));
   }, [params.id]);
 
-  // Derive chart data from raw events — zero extra API calls
   const chartData = useMemo(() => {
     if (!data) return null;
     return computeChartData(data.events, data.recipients);
@@ -79,7 +78,7 @@ export default function CampaignDetailPage() {
     );
   }
 
-  const { stats, recipients, events } = data;
+  const { campaign, stats, recipients, events } = data;
 
   const getRecipientEvents = (email) =>
     events
@@ -95,9 +94,34 @@ export default function CampaignDetailPage() {
         ← Back to Campaigns
       </a>
 
-      <h1 className="font-serif italic text-3xl mb-8">Campaign Detail</h1>
+      {/* ── Campaign header with real name ───────────────────────────────── */}
+      <div className="flex items-start justify-between mb-8 gap-4">
+        <div>
+          <h1 className="font-serif italic text-3xl mb-1">
+            {campaign?.name || 'Campaign Detail'}
+          </h1>
+          {campaign?.subject && (
+            <p className="text-sm text-gallery-mid">{campaign.subject}</p>
+          )}
+        </div>
+        {campaign?.status && (
+          <span
+            className={`flex-shrink-0 mt-1 ${
+              campaign.status === 'Sent'
+                ? 'badge-sent'
+                : campaign.status === 'Sending'
+                  ? 'badge bg-yellow-50 text-yellow-700'
+                  : campaign.status === 'Partial'
+                    ? 'badge bg-orange-50 text-orange-700'
+                    : 'badge bg-gray-50 text-gallery-mid'
+            }`}
+          >
+            {campaign.status}
+          </span>
+        )}
+      </div>
 
-      {/* ── Stats row (unchanged) ──────────────────────────────────────────── */}
+      {/* ── Stats row ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
         <div className="stat-card">
           <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Sent</div>
@@ -125,10 +149,9 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
-      {/* ── NEW: Charts section ────────────────────────────────────────────── */}
+      {/* ── Charts ───────────────────────────────────────────────────────── */}
       {chartData && (
         <div className="mb-8 space-y-3">
-          {/* Row 1: opens over time (wide) + engagement donuts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             <div className="lg:col-span-2">
               <OpensOverTime data={chartData.hourlyOpens} />
@@ -137,8 +160,6 @@ export default function CampaignDetailPage() {
               <EngagementSummary stats={stats} />
             </div>
           </div>
-
-          {/* Row 2: device breakdown + top links (only if there's data) */}
           {(chartData.hasDeviceData || chartData.hasClickData) && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <DeviceBreakdown data={chartData.devices} />
@@ -148,7 +169,7 @@ export default function CampaignDetailPage() {
         </div>
       )}
 
-      {/* ── Recipients table (unchanged) ──────────────────────────────────── */}
+      {/* ── Recipients table ─────────────────────────────────────────────── */}
       <div className="border border-gallery-border bg-gallery-white">
         <div className="px-5 py-3 border-b border-gallery-border">
           <span className="text-2xs font-medium uppercase tracking-wider text-gallery-mid">
