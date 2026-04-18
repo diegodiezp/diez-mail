@@ -1,7 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'next/navigation';
+import {
+  computeChartData,
+  OpensOverTime,
+  DeviceBreakdown,
+  TopLinks,
+  EngagementSummary,
+} from '@/components/CampaignCharts';
 
 function formatDate(iso) {
   if (!iso) return '-';
@@ -50,17 +57,30 @@ export default function CampaignDetailPage() {
       .catch(() => setLoading(false));
   }, [params.id]);
 
+  // Derive chart data from raw events — zero extra API calls
+  const chartData = useMemo(() => {
+    if (!data) return null;
+    return computeChartData(data.events, data.recipients);
+  }, [data]);
+
   if (loading) {
-    return <div className="text-center py-20 text-gallery-light text-sm">Loading campaign data...</div>;
+    return (
+      <div className="text-center py-20 text-gallery-light text-sm">
+        Loading campaign data...
+      </div>
+    );
   }
 
   if (!data) {
-    return <div className="text-center py-20 text-gallery-light text-sm">Campaign not found.</div>;
+    return (
+      <div className="text-center py-20 text-gallery-light text-sm">
+        Campaign not found.
+      </div>
+    );
   }
 
   const { stats, recipients, events } = data;
 
-  // Get events for a specific recipient
   const getRecipientEvents = (email) =>
     events
       .filter((e) => e['Recipient Email'] === email)
@@ -68,13 +88,16 @@ export default function CampaignDetailPage() {
 
   return (
     <div>
-      <a href="/" className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors mb-4 inline-block">
+      <a
+        href="/"
+        className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors mb-4 inline-block"
+      >
         ← Back to Campaigns
       </a>
 
       <h1 className="font-serif italic text-3xl mb-8">Campaign Detail</h1>
 
-      {/* Stats row */}
+      {/* ── Stats row (unchanged) ──────────────────────────────────────────── */}
       <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
         <div className="stat-card">
           <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Sent</div>
@@ -102,7 +125,30 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
-      {/* Recipients table */}
+      {/* ── NEW: Charts section ────────────────────────────────────────────── */}
+      {chartData && (
+        <div className="mb-8 space-y-3">
+          {/* Row 1: opens over time (wide) + engagement donuts */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div className="lg:col-span-2">
+              <OpensOverTime data={chartData.hourlyOpens} />
+            </div>
+            <div>
+              <EngagementSummary stats={stats} />
+            </div>
+          </div>
+
+          {/* Row 2: device breakdown + top links (only if there's data) */}
+          {(chartData.hasDeviceData || chartData.hasClickData) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <DeviceBreakdown data={chartData.devices} />
+              <TopLinks data={chartData.topLinks} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Recipients table (unchanged) ──────────────────────────────────── */}
       <div className="border border-gallery-border bg-gallery-white">
         <div className="px-5 py-3 border-b border-gallery-border">
           <span className="text-2xs font-medium uppercase tracking-wider text-gallery-mid">
@@ -112,18 +158,15 @@ export default function CampaignDetailPage() {
 
         {recipients.map((r) => (
           <div key={r.email} className="border-b border-gallery-border last:border-0">
-            {/* Row */}
             <div
               className="flex items-center gap-4 px-5 py-3 cursor-pointer hover:bg-gallery-bg transition-colors"
               onClick={() => setExpandedEmail(expandedEmail === r.email ? null : r.email)}
             >
-              {/* Name + email */}
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{r.name}</div>
                 <div className="text-2xs text-gallery-mid truncate">{r.email}</div>
               </div>
 
-              {/* Status */}
               <div className="flex-shrink-0">
                 {r.opens > 0 ? (
                   <span className="badge-open">Opened</span>
@@ -134,35 +177,29 @@ export default function CampaignDetailPage() {
                 )}
               </div>
 
-              {/* Opens count */}
               <div className="text-right w-12 flex-shrink-0">
                 <div className="text-sm font-medium tabular-nums">{r.opens}</div>
                 <div className="text-2xs text-gallery-light">opens</div>
               </div>
 
-              {/* Clicks count */}
               <div className="text-right w-12 flex-shrink-0">
                 <div className="text-sm font-medium tabular-nums">{r.clicks || 0}</div>
                 <div className="text-2xs text-gallery-light">clicks</div>
               </div>
 
-              {/* Device - hidden on mobile */}
               <div className="text-right w-20 text-2xs text-gallery-mid hidden sm:block flex-shrink-0">
                 {r.devices.join(', ') || '-'}
               </div>
 
-              {/* Last open - hidden on mobile */}
               <div className="text-right w-24 text-2xs text-gallery-mid hidden sm:block flex-shrink-0">
                 <TimeAgo date={r.lastOpen} />
               </div>
 
-              {/* Expand indicator */}
               <div className="text-gallery-light text-xs w-4 flex-shrink-0">
                 {expandedEmail === r.email ? '−' : '+'}
               </div>
             </div>
 
-            {/* Expanded timeline */}
             {expandedEmail === r.email && (
               <div className="bg-gallery-bg px-5 py-4 border-t border-gallery-border">
                 <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-3">
@@ -171,7 +208,8 @@ export default function CampaignDetailPage() {
                 <div className="space-y-2">
                   {getRecipientEvents(r.email).map((event, i) => (
                     <div key={i} className="flex items-start gap-3">
-                      <div className="w-1.5 h-1.5 mt-1.5 rounded-full flex-shrink-0"
+                      <div
+                        className="w-1.5 h-1.5 mt-1.5 rounded-full flex-shrink-0"
                         style={{
                           backgroundColor:
                             event['Event Type'] === 'Open'
@@ -188,7 +226,9 @@ export default function CampaignDetailPage() {
                             <span className="text-gallery-mid ml-2">on {event.Device}</span>
                           )}
                         </div>
-                        <div className="text-2xs text-gallery-light">{formatDate(event.Timestamp)}</div>
+                        <div className="text-2xs text-gallery-light">
+                          {formatDate(event.Timestamp)}
+                        </div>
                       </div>
                     </div>
                   ))}
