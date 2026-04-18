@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 function formatDate(iso) {
   if (!iso) return '-';
@@ -14,22 +14,48 @@ function formatDate(iso) {
 }
 
 export default function ContactsPage() {
-  const [people, setPeople] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [people, setPeople]               = useState([]);
+  const [loading, setLoading]             = useState(true);
+  const [campaigns, setCampaigns]         = useState([]);
+  const [searchQuery, setSearchQuery]     = useState('');
   const [selectedContact, setSelectedContact] = useState(null);
   const [contactEvents, setContactEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
 
+  // Fetch contacts + campaigns in parallel
   useEffect(() => {
-    fetch('/api/contacts')
-      .then((r) => r.json())
-      .then((data) => {
-        setPeople(data.people || []);
+    Promise.all([
+      fetch('/api/contacts').then((r) => r.json()),
+      fetch('/api/campaigns').then((r) => r.json()),
+    ])
+      .then(([contactData, campaignData]) => {
+        setPeople(contactData.people || []);
+        setCampaigns(campaignData.campaigns || []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
+
+  // Campaign lookup map: Airtable record ID → campaign name
+  const campaignMap = useMemo(() => {
+    const map = {};
+    for (const c of campaigns) map[c.id] = c.Name || 'Campaign';
+    return map;
+  }, [campaigns]);
+
+  // Summary stats derived from people list
+  const stats = useMemo(() => {
+    if (!people.length) return null;
+    const typeCounts = {};
+    for (const p of people) {
+      const t = p.type || 'Other';
+      typeCounts[t] = (typeCounts[t] || 0) + 1;
+    }
+    const topTypes = Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+    return { total: people.length, topTypes };
+  }, [people]);
 
   const filtered = searchQuery
     ? people.filter(
@@ -53,13 +79,46 @@ export default function ContactsPage() {
     setLoadingEvents(false);
   };
 
+  // Resolve campaign name from an event's Campaign field (array of record IDs)
+  function getCampaignName(event) {
+    const ids = event.Campaign;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) return null;
+    return campaignMap[ids[0]] || null;
+  }
+
   return (
     <div>
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <h1 className="font-serif italic text-3xl mb-2">Contacts</h1>
-      <p className="text-sm text-gallery-mid mb-6">{people.length} people across Contacts and Clients</p>
+      <p className="text-sm text-gallery-mid mb-6">
+        {people.length} people across Contacts and Clients
+      </p>
+
+      {/* ── Summary stats ──────────────────────────────────────────────────── */}
+      {!loading && stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+          <div className="stat-card">
+            <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">
+              Total
+            </div>
+            <div className="text-2xl font-medium tabular-nums">{stats.total}</div>
+          </div>
+          {stats.topTypes.map(([type, count]) => (
+            <div key={type} className="stat-card">
+              <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">
+                {type}
+              </div>
+              <div className="text-2xl font-medium tabular-nums">{count}</div>
+              <div className="text-2xs text-gallery-light mt-0.5">
+                {Math.round((count / stats.total) * 100)}% of list
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-        {/* Left: list */}
+        {/* ── Left: list ─────────────────────────────────────────────────── */}
         <div className="lg:col-span-3">
           <input
             type="text"
@@ -89,10 +148,15 @@ export default function ContactsPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="text-sm font-medium truncate">
-                          {p.name || p.surname ? `${p.name} ${p.surname}`.trim() : p.email}
+                          {p.name || p.surname
+                            ? `${p.name} ${p.surname}`.trim()
+                            : p.email}
                         </div>
                         {(p.name || p.surname) && (
                           <div className="text-2xs text-gallery-mid truncate">{p.email}</div>
+                        )}
+                        {p.city && (
+                          <div className="text-2xs text-gallery-light truncate">{p.city}</div>
                         )}
                       </div>
                       {p.type && (
@@ -111,79 +175,117 @@ export default function ContactsPage() {
           </div>
         </div>
 
-        {/* Right: timeline */}
+        {/* ── Right: timeline ────────────────────────────────────────────── */}
         <div className="lg:col-span-2">
           <div className="sticky top-8">
             {selectedContact ? (
               <div className="border border-gallery-border bg-gallery-white">
+                {/* Contact header */}
                 <div className="px-5 py-4 border-b border-gallery-border">
-                  <div className="font-medium text-lg">
+                  <div className="font-medium text-lg leading-tight">
                     {selectedContact.name} {selectedContact.surname}
                   </div>
-                  <div className="text-sm text-gallery-mid">{selectedContact.email}</div>
-                  {selectedContact.city && (
+                  <div className="text-sm text-gallery-mid mt-0.5">
+                    {selectedContact.email}
+                  </div>
+                  {(selectedContact.city || selectedContact.country) && (
                     <div className="text-2xs text-gallery-light mt-1">
-                      {selectedContact.city}{selectedContact.country ? `, ${selectedContact.country}` : ''}
+                      {[selectedContact.city, selectedContact.country]
+                        .filter(Boolean)
+                        .join(', ')}
                     </div>
                   )}
                   {selectedContact.phone && (
-                    <div className="text-2xs text-gallery-light">{selectedContact.phone}</div>
+                    <div className="text-2xs text-gallery-light">
+                      {selectedContact.phone}
+                    </div>
                   )}
-                  <div className="flex gap-2 mt-2">
+                  {selectedContact.company && (
+                    <div className="text-2xs text-gallery-light">
+                      {selectedContact.company}
+                    </div>
+                  )}
+                  <div className="flex gap-2 mt-2 flex-wrap">
                     {selectedContact.type && (
                       <span className="badge-client">{selectedContact.type}</span>
                     )}
                     {selectedContact.status && (
-                      <span className={`badge ${
-                        selectedContact.status === 'Hot' ? 'bg-red-50 text-red-700' :
-                        selectedContact.status === 'Warm' ? 'bg-orange-50 text-orange-700' :
-                        'bg-gray-100 text-gallery-mid'
-                      }`}>{selectedContact.status}</span>
+                      <span
+                        className={`badge ${
+                          selectedContact.status === 'Hot'
+                            ? 'bg-red-50 text-red-700'
+                            : selectedContact.status === 'Warm'
+                              ? 'bg-orange-50 text-orange-700'
+                              : 'bg-gray-100 text-gallery-mid'
+                        }`}
+                      >
+                        {selectedContact.status}
+                      </span>
                     )}
                   </div>
                 </div>
 
-                <div className="px-5 py-3 border-b border-gallery-border">
+                {/* Timeline header */}
+                <div className="px-5 py-3 border-b border-gallery-border bg-gallery-bg">
                   <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid">
                     Email Activity Timeline
                   </div>
                 </div>
 
+                {/* Timeline events */}
                 <div className="max-h-[50vh] overflow-y-auto">
                   {loadingEvents ? (
-                    <div className="p-6 text-center text-sm text-gallery-light">Loading...</div>
-                  ) : contactEvents.length === 0 ? (
                     <div className="p-6 text-center text-sm text-gallery-light">
-                      No email activity recorded yet.
+                      Loading...
+                    </div>
+                  ) : contactEvents.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <p className="font-serif italic text-gallery-mid text-sm">
+                        No activity yet
+                      </p>
+                      <p className="text-2xs text-gallery-light mt-1">
+                        No emails recorded for this contact.
+                      </p>
                     </div>
                   ) : (
                     <div className="divide-y divide-gallery-border">
-                      {contactEvents.map((event, i) => (
-                        <div key={i} className="px-5 py-3 flex items-start gap-3">
-                          <div
-                            className="w-2 h-2 mt-1.5 rounded-full flex-shrink-0"
-                            style={{
-                              backgroundColor:
-                                event['Event Type'] === 'Open'
-                                  ? '#3a7d44'
-                                  : event['Event Type'] === 'Sent'
-                                    ? '#4a90d9'
-                                    : '#d44',
-                            }}
-                          />
-                          <div className="flex-1">
-                            <div className="text-sm">
-                              <span className="font-medium">{event['Event Type']}</span>
-                              {event.Device && (
-                                <span className="text-gallery-mid ml-1.5">on {event.Device}</span>
+                      {contactEvents.map((event, i) => {
+                        const campaignName = getCampaignName(event);
+                        return (
+                          <div key={i} className="px-5 py-3 flex items-start gap-3">
+                            <div
+                              className="w-2 h-2 mt-1.5 rounded-full flex-shrink-0"
+                              style={{
+                                backgroundColor:
+                                  event['Event Type'] === 'Open'
+                                    ? '#3a7d44'
+                                    : event['Event Type'] === 'Sent'
+                                      ? '#4a90d9'
+                                      : '#d44',
+                              }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm">
+                                <span className="font-medium">{event['Event Type']}</span>
+                                {event.Device && (
+                                  <span className="text-gallery-mid ml-1.5">
+                                    on {event.Device}
+                                  </span>
+                                )}
+                              </div>
+                              {/* ← NEW: campaign name */}
+                              {campaignName && (
+                                <div className="text-2xs text-gallery-accent mt-0.5 truncate">
+                                  {campaignName}
+                                </div>
                               )}
-                            </div>
-                            <div className="text-2xs text-gallery-light mt-0.5">
-                              {formatDate(event.Timestamp)}
+                              <div className="text-2xs text-gallery-light mt-0.5">
+                                {formatDate(event.Timestamp)}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
