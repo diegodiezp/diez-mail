@@ -68,8 +68,8 @@ export default function ContactsPage() {
     : people;
   
   useEffect(() => {
-  setVisibleCount(100);
-}, [searchQuery]);
+    setVisibleCount(100);
+  }, [searchQuery]);
 
   const openTimeline = async (person) => {
     setSelectedContact(person);
@@ -150,7 +150,7 @@ export default function ContactsPage() {
                     }`}
                     onClick={() => openTimeline(p)}
                   >
-                    <div className="flex items-center justify-between gap-2">
+                                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="text-sm font-medium truncate">
                           {p.name || p.surname
@@ -166,7 +166,9 @@ export default function ContactsPage() {
                       </div>
                       {p.type && (
                         <span className="badge-client flex-shrink-0">{p.type}</span>
+                      )}
                     </div>
+
                   </div>
                 ))}
               </div>
