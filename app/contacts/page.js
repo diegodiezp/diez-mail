@@ -18,6 +18,7 @@ export default function ContactsPage() {
   const [loading, setLoading]             = useState(true);
   const [campaigns, setCampaigns]         = useState([]);
   const [searchQuery, setSearchQuery]     = useState('');
+  const [visibleCount, setVisibleCount] = useState(100);
   const [selectedContact, setSelectedContact] = useState(null);
   const [contactEvents, setContactEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
@@ -65,6 +66,10 @@ export default function ContactsPage() {
           p.email?.toLowerCase().includes(searchQuery.toLowerCase())
       )
     : people;
+  
+  useEffect(() => {
+  setVisibleCount(100);
+}, [searchQuery]);
 
   const openTimeline = async (person) => {
     setSelectedContact(person);
@@ -128,14 +133,14 @@ export default function ContactsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
 
-          <div className="border border-gallery-border bg-gallery-white">
+                   <div className="border border-gallery-border bg-gallery-white">
             {loading ? (
               <div className="p-6 text-center text-sm text-gallery-light">Loading...</div>
             ) : filtered.length === 0 ? (
               <div className="p-6 text-center text-sm text-gallery-light">No contacts found</div>
             ) : (
               <div>
-                  {filtered.map((p) => (
+                {filtered.slice(0, visibleCount).map((p) => (
                   <div
                     key={p.email}
                     className={`px-4 py-3 border-b border-gallery-border last:border-0 cursor-pointer transition-colors ${
@@ -166,6 +171,24 @@ export default function ContactsPage() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {filtered.length > visibleCount && (
+              <div className="px-4 py-3 border-t border-gallery-border text-center">
+                <button
+                  type="button"
+                  className="text-2xs font-medium uppercase tracking-wider text-gallery-mid hover:text-gallery-black transition-colors"
+                  onClick={() => setVisibleCount((count) => count + 100)}
+                >
+                  Load more contacts
+                </button>
+                <div className="mt-1 text-2xs text-gallery-light">
+                  Showing {Math.min(visibleCount, filtered.length)} of {filtered.length}
+                </div>
+              </div>
+            )}
+          </div>
+
             )}
            
           </div>
