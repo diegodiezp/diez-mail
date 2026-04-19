@@ -135,7 +135,7 @@ export default function ContactsPage() {
               <div className="p-6 text-center text-sm text-gallery-light">No contacts found</div>
             ) : (
               <div>
-                {filtered.slice(0, 100).map((p) => (
+                  {filtered.map((p) => (
                   <div
                     key={p.email}
                     className={`px-4 py-3 border-b border-gallery-border last:border-0 cursor-pointer transition-colors ${
@@ -167,11 +167,7 @@ export default function ContactsPage() {
                 ))}
               </div>
             )}
-            {filtered.length > 100 && (
-              <div className="px-4 py-3 text-2xs text-gallery-light text-center border-t border-gallery-border">
-                Showing 100 of {filtered.length}. Use search to narrow down.
-              </div>
-            )}
+           
           </div>
         </div>
 
