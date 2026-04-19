@@ -166,7 +166,6 @@ export default function ContactsPage() {
                       </div>
                       {p.type && (
                         <span className="badge-client flex-shrink-0">{p.type}</span>
-                      )}
                     </div>
                   </div>
                 ))}
