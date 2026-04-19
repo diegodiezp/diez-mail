@@ -48,14 +48,26 @@ export default function CampaignDetailPage() {
 
   useEffect(() => {
     if (!params.id) return;
+
+    setLoading(true);
+    setData(null);
+
     fetch(`/api/campaigns?id=${params.id}`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        const json = await r.json();
+        if (!r.ok) throw new Error(json.error || 'Failed to load campaign');
+        return json;
+      })
       .then((d) => {
         setData(d);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setData(null);
+        setLoading(false);
+      });
   }, [params.id]);
+
 
   const chartData = useMemo(() => {
     if (!data) return null;
@@ -78,7 +90,16 @@ export default function CampaignDetailPage() {
     );
   }
 
-  const { campaign, stats, recipients, events } = data;
+    const { campaign, stats, recipients, events } = data;
+
+  if (!stats || !recipients || !events) {
+    return (
+      <div className="text-center py-20 text-gallery-light text-sm">
+        Campaign not found.
+      </div>
+    );
+  }
+
 
   const getRecipientEvents = (email) =>
     events
