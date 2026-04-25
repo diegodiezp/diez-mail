@@ -63,16 +63,11 @@ export default function HomePage() {
   return (
     <div>
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-end justify-between mb-6">
-        <div>
-          <h1 className="font-serif italic text-3xl mb-1">Campaigns</h1>
-          <p className="text-sm text-gallery-mid">
-            {campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <a href="/campaigns/new" className="btn-primary">
-          New Campaign
-        </a>
+      <div className="mb-6">
+        <h1 className="font-serif italic text-3xl mb-1">Campaigns</h1>
+        <p className="text-sm text-gallery-mid">
+          {campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}
+        </p>
       </div>
 
       {/* ── Summary stats (only shown when there's sent data) ──────────────── */}
