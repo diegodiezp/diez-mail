@@ -14,6 +14,12 @@ export function middleware(request) {
     return NextResponse.next();
   }
 
+  // Allow engagement endpoint without auth
+  // Called by viewing rooms via sendBeacon from a different origin
+  if (pathname.startsWith('/api/engagement')) {
+    return NextResponse.next();
+  }
+
   // Check for auth cookie
   const authCookie = request.cookies.get('diez-mail-auth');
 
