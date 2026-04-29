@@ -22,6 +22,7 @@ export default function NewCampaignPage() {
   const [subject, setSubject]           = useState('');
   const [pdfLink, setPdfLink]           = useState('');
   const [includeSig, setIncludeSig]     = useState(true);
+  const [body, setBody]                 = useState('');
 
   // Recipients
   const [allPeople, setAllPeople]         = useState([]);
@@ -81,22 +82,18 @@ export default function NewCampaignPage() {
   // Rich text toolbar
   const fmt = (cmd, val) => {
     document.execCommand(cmd, false, val);
+    if (editorRef.current) {
+      setBody(editorRef.current.innerHTML);
+    }
     editorRef.current?.focus();
   };
 
   const insertMergeTag = (tag) => {
     editorRef.current?.focus();
     document.execCommand('insertText', false, tag);
-  };
-
-  // Collect body HTML from contentEditable
-  const getBodyHTML = () => {
-    if (!editorRef.current) return '';
-    let html = editorRef.current.innerHTML;
-    if (includeSig) {
-      html += `<br/><br/>${SIGNATURE.replace(/\n/g, '<br/>')}`;
+    if (editorRef.current) {
+      setBody(editorRef.current.innerHTML);
     }
-    return html;
   };
 
   // Sending
@@ -104,9 +101,8 @@ export default function NewCampaignPage() {
     setStep('sending');
     setSendProgress(`Sending to ${selected.size} recipient${selected.size > 1 ? 's' : ''}…`);
 
-    const bodyTemplate = editorRef.current?.innerHTML || '';
     const sigBlock = includeSig ? `\n\n${SIGNATURE}` : '';
-    const fullBody = bodyTemplate + sigBlock;
+    const fullBody = body + sigBlock;
 
     try {
       const res = await fetch('/api/send', {
@@ -441,6 +437,8 @@ export default function NewCampaignPage() {
             ref={editorRef}
             contentEditable
             suppressContentEditableWarning
+            onInput={(e) => setBody(e.currentTarget.innerHTML)}
+            onBlur={(e) => setBody(e.currentTarget.innerHTML)}
             className="outline-none text-sm leading-relaxed text-gallery-black min-h-[200px] font-sans"
             style={{ fontFamily: 'DM Sans, sans-serif' }}
           />
