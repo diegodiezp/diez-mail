@@ -14,6 +14,9 @@ const TYPE_FILTERS = [
 
 const SIGNATURE = `Diego Diez\nDirector of diez\n+31 633261845\n+34 648872907\nInstagram`;
 
+// HTML version of the signature with proper line breaks
+const SIGNATURE_HTML = SIGNATURE.split('\n').map((line) => `<div>${line}</div>`).join('');
+
 export default function NewCampaignPage() {
   const editorRef = useRef(null);
 
@@ -101,7 +104,7 @@ export default function NewCampaignPage() {
     setStep('sending');
     setSendProgress(`Sending to ${selected.size} recipient${selected.size > 1 ? 's' : ''}…`);
 
-    const sigBlock = includeSig ? `\n\n${SIGNATURE}` : '';
+    const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
     const fullBody = body + sigBlock;
 
     try {
