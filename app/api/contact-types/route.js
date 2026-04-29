@@ -1,4 +1,4 @@
-// Returns the available options of the "Type" single-select field
+// Returns the available options of the "Role" multiple-select field
 // from the Contacts table in Airtable.
 //
 // This lets the frontend build the contact-type filter buttons dynamically,
@@ -7,7 +7,7 @@
 
 const AIRTABLE_BASE_ID  = 'appFkqvnXlu2Y1Fe4';
 const AIRTABLE_TABLE_ID = 'tbl3NlUODD2Ztq3sl';
-const TYPE_FIELD_NAME   = 'Type'; // adjust if your field has a different name
+const ROLE_FIELD_NAME   = 'Role';
 
 export async function GET() {
   try {
@@ -37,17 +37,19 @@ export async function GET() {
       );
     }
 
-    const typeField = table.fields?.find(
-      (f) => f.name === TYPE_FIELD_NAME && f.type === 'singleSelect'
+    // Role can be either singleSelect or multipleSelects in Airtable
+    const roleField = table.fields?.find(
+      (f) => f.name === ROLE_FIELD_NAME &&
+             (f.type === 'multipleSelects' || f.type === 'singleSelect')
     );
-    if (!typeField) {
+    if (!roleField) {
       return Response.json(
-        { error: `Single-select field "${TYPE_FIELD_NAME}" not found in table` },
+        { error: `Select field "${ROLE_FIELD_NAME}" not found in table` },
         { status: 404 }
       );
     }
 
-    const options = typeField.options?.choices?.map((c) => c.name) || [];
+    const options = roleField.options?.choices?.map((c) => c.name) || [];
     return Response.json({ options });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
