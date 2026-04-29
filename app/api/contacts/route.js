@@ -1,57 +1,52 @@
-// Returns the available options of the "Type" multiple-select field
-// from the People table in Airtable.
-//
-// This lets the frontend build the contact-type filter buttons dynamically,
-// so when Diego adds, renames or removes options in Airtable, the email
-// composer reflects the change without any code edit.
+import { NextResponse } from 'next/server';
+import { getPeople, getPeopleByRole } from '@/lib/airtable';
 
-const AIRTABLE_BASE_ID  = 'appFkqvnXlu2Y1Fe4';
-const AIRTABLE_TABLE_ID = 'tbl3NlUODD2Ztq3sl';
-const TYPE_FIELD_NAME   = 'Type';
+export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request) {
   try {
-    const res = await fetch(
-      `https://api.airtable.com/v0/meta/bases/${AIRTABLE_BASE_ID}/tables`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.AIRTABLE_PAT}`,
-        },
-      }
-    );
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type');
+    const search = searchParams.get('q')?.toLowerCase();
 
-    if (!res.ok) {
-      const errText = await res.text();
-      return Response.json(
-        { error: `Airtable schema fetch failed: ${errText}` },
-        { status: res.status }
+    let people;
+
+    if (type) {
+      people = await getPeopleByRole(type);
+    } else {
+      people = await getPeople();
+    }
+
+    // Normalize field names for the frontend
+    people = people
+      .filter((p) => p.Email)
+      .map((p) => ({
+        id: p.id,
+        name: p['First Name'] || '',
+        surname: p['Last Name'] || '',
+        fullName: `${p['First Name'] || ''} ${p['Last Name'] || ''}`.trim(),
+        email: p.Email,
+        phone: p.Phone || '',
+        city: p.City || '',
+        company: p.Company || '',
+        type: Array.isArray(p.Type) ? p.Type[0] || '' : p.Type || '',
+        notes: p.Notes || '',
+      }));
+
+    // Search filter
+    if (search) {
+      people = people.filter(
+        (p) =>
+          p.name?.toLowerCase().includes(search) ||
+          p.surname?.toLowerCase().includes(search) ||
+          p.email?.toLowerCase().includes(search) ||
+          p.company?.toLowerCase().includes(search)
       );
     }
 
-    const data = await res.json();
-    const table = data.tables?.find((t) => t.id === AIRTABLE_TABLE_ID);
-    if (!table) {
-      return Response.json(
-        { error: `Table ${AIRTABLE_TABLE_ID} not found in base` },
-        { status: 404 }
-      );
-    }
-
-    // Type can be either singleSelect or multipleSelects in Airtable
-    const typeField = table.fields?.find(
-      (f) => f.name === TYPE_FIELD_NAME &&
-             (f.type === 'multipleSelects' || f.type === 'singleSelect')
-    );
-    if (!typeField) {
-      return Response.json(
-        { error: `Select field "${TYPE_FIELD_NAME}" not found in table` },
-        { status: 404 }
-      );
-    }
-
-    const options = typeField.options?.choices?.map((c) => c.name) || [];
-    return Response.json({ options });
-  } catch (err) {
-    return Response.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ people, total: people.length });
+  } catch (error) {
+    console.error('Contacts API error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
