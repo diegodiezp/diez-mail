@@ -16,7 +16,7 @@ export function middleware(request) {
 
   // Allow engagement endpoint without auth
   // Called by viewing rooms via sendBeacon from a different origin
-  if (pathname.startsWith('/api/engagement')) {
+  if (pathname.startsWith('/api/ev')) {
     return NextResponse.next();
   }
 
