@@ -12,10 +12,17 @@ const TYPE_FILTERS = [
   { value: 'Gallery', label: 'Galleries' },
 ];
 
+// Plain text version (used to render the preview in the compose UI)
 const SIGNATURE = `Diego Diez\nDirector of diez\n+31 633261845\n+34 648872907\nInstagram`;
 
-// HTML version of the signature with proper line breaks
-const SIGNATURE_HTML = SIGNATURE.split('\n').map((line) => `<div>${line}</div>`).join('');
+// HTML version sent in the actual email, with links on "diez" and "Instagram"
+const SIGNATURE_HTML = [
+  `<div>Diego Diez</div>`,
+  `<div>Director of <a href="https://diez.gallery" style="color:#1a1a1a;text-decoration:underline;">diez</a></div>`,
+  `<div>+31 633261845</div>`,
+  `<div>+34 648872907</div>`,
+  `<div><a href="https://instagram.com/diez.gallery" style="color:#1a1a1a;text-decoration:underline;">Instagram</a></div>`,
+].join('');
 
 export default function NewCampaignPage() {
   const editorRef = useRef(null);
