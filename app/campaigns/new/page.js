@@ -2,15 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-const TYPE_FILTERS = [
-  { value: '', label: 'All' },
-  { value: 'Collector', label: 'Collectors' },
-  { value: 'Advisor', label: 'Advisors' },
-  { value: 'Curator', label: 'Curators' },
-  { value: 'Institution', label: 'Institutions' },
-  { value: 'Press', label: 'Press' },
-  { value: 'Gallery', label: 'Galleries' },
-];
+// "All" is always the first filter; the rest come from Airtable
+const ALL_FILTER = { value: '', label: 'All' };
 
 // Plain text version (used to render the preview in the compose UI)
 const SIGNATURE = `Diego Diez\nDirector of diez\n+31 633261845\n+34 648872907\nInstagram`;
@@ -34,6 +27,9 @@ export default function NewCampaignPage() {
   const [includeSig, setIncludeSig]     = useState(true);
   const [body, setBody]                 = useState('');
 
+  // Type filters (loaded from Airtable on mount)
+  const [typeFilters, setTypeFilters] = useState([ALL_FILTER]);
+
   // Recipients
   const [allPeople, setAllPeople]         = useState([]);
   const [filteredPeople, setFilteredPeople] = useState([]);
@@ -46,6 +42,26 @@ export default function NewCampaignPage() {
   const [step, setStep]             = useState('compose'); // compose | confirm | sending | done
   const [sendResult, setSendResult] = useState(null);
   const [sendProgress, setSendProgress] = useState('');
+
+  // Fetch contact-type options from Airtable schema
+  useEffect(() => {
+    fetch('/api/contact-types')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.options && Array.isArray(data.options)) {
+          // Build [{ value, label }] from the option names returned by Airtable
+          // Default label = pluralized name (Collector → Collectors)
+          const dynamicFilters = data.options.map((name) => ({
+            value: name,
+            label: name.endsWith('s') ? name : `${name}s`,
+          }));
+          setTypeFilters([ALL_FILTER, ...dynamicFilters]);
+        }
+      })
+      .catch(() => {
+        // If schema fetch fails, keep just "All" so the UI still works
+      });
+  }, []);
 
   // Fetch contacts
   useEffect(() => {
@@ -257,7 +273,7 @@ export default function NewCampaignPage() {
 
         {/* Type filters */}
         <div className="px-3 py-2 border-b border-gallery-border flex flex-wrap gap-1">
-          {TYPE_FILTERS.map((f) => (
+          {typeFilters.map((f) => (
             <button
               key={f.value}
               onClick={() => setTypeFilter(f.value)}
