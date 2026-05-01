@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 // "All" is always the first filter; the rest come from Airtable
@@ -30,7 +30,7 @@ function resolveTemplate(template, person) {
   return resolved;
 }
 
-export default function NewCampaignPage() {
+function NewCampaignContent() {
   const editorRef = useRef(null);
   const searchParams = useSearchParams();
 
@@ -758,5 +758,13 @@ export default function NewCampaignPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function NewCampaignPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-20 text-gallery-light text-sm">Loading...</div>}>
+      <NewCampaignContent />
+    </Suspense>
   );
 }
