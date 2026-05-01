@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 // "All" is always the first filter; the rest come from Airtable
 const ALL_FILTER = { value: '', label: 'All' };
@@ -17,8 +18,24 @@ const SIGNATURE_HTML = [
   `<div><a href="https://instagram.com/diez.gallery" style="color:#1a1a1a;text-decoration:underline;">Instagram</a></div>`,
 ].join('');
 
+// Resolve merge tags for a single recipient against the template
+function resolveTemplate(template, person) {
+  let resolved = template
+    .replace(/\{\{first_name\}\}/g, person.name || '')
+    .replace(/\{\{surname\}\}/g, person.surname || '')
+    .replace(/\{\{full_name\}\}/g, `${person.name || ''} ${person.surname || ''}`.trim())
+    .replace(/\{\{email\}\}/g, person.email || '')
+    .replace(/\{\{city\}\}/g, person.city || '');
+  // Leave {{pdf_link}} as-is; it's resolved server-side with tracking
+  return resolved;
+}
+
 export default function NewCampaignPage() {
   const editorRef = useRef(null);
+  const searchParams = useSearchParams();
+
+  // If we're adding recipients to an existing campaign
+  const existingCampaignId = searchParams.get('campaign') || null;
 
   // Form state
   const [campaignName, setCampaignName] = useState('');
@@ -38,10 +55,47 @@ export default function NewCampaignPage() {
   const [typeFilter, setTypeFilter]       = useState('');
   const [loadingPeople, setLoadingPeople] = useState(true);
 
+  // Already-sent emails (for incremental campaigns)
+  const [alreadySentEmails, setAlreadySentEmails] = useState(new Set());
+
+  // Personalize step: map of personId -> edited HTML body
+  const [customBodies, setCustomBodies]     = useState({});
+  const [editingPersonId, setEditingPersonId] = useState(null);
+  const personalizeEditorRef = useRef(null);
+
   // Sending state
-  const [step, setStep]             = useState('compose'); // compose | confirm | sending | done
+  // Steps: compose | personalize | confirm | sending | done
+  const [step, setStep]             = useState('compose');
   const [sendResult, setSendResult] = useState(null);
   const [sendProgress, setSendProgress] = useState('');
+
+  // Load existing campaign data if resuming
+  useEffect(() => {
+    if (!existingCampaignId) return;
+    fetch(`/api/campaigns?id=${existingCampaignId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.campaign) {
+          setCampaignName(data.campaign.name || '');
+          setSubject(data.campaign.subject || '');
+          setPdfLink(data.campaign['PDF Link'] || '');
+          if (data.campaign['Body Template']) {
+            setBody(data.campaign['Body Template']);
+          }
+        }
+        // Collect emails already sent so we can flag them
+        if (data.events) {
+          const sent = new Set();
+          data.events.forEach((ev) => {
+            if (ev['Event Type'] === 'Sent' && ev['Recipient Email']) {
+              sent.add(ev['Recipient Email']);
+            }
+          });
+          setAlreadySentEmails(sent);
+        }
+      })
+      .catch(() => {});
+  }, [existingCampaignId]);
 
   // Fetch contact-type options from Airtable schema
   useEffect(() => {
@@ -49,8 +103,6 @@ export default function NewCampaignPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.options && Array.isArray(data.options)) {
-          // Build [{ value, label }] from the option names returned by Airtable
-          // Default label = pluralized name (Collector → Collectors)
           const dynamicFilters = data.options.map((name) => ({
             value: name,
             label: name.endsWith('s') ? name : `${name}s`,
@@ -58,9 +110,7 @@ export default function NewCampaignPage() {
           setTypeFilters([ALL_FILTER, ...dynamicFilters]);
         }
       })
-      .catch(() => {
-        // If schema fetch fails, keep just "All" so the UI still works
-      });
+      .catch(() => {});
   }, []);
 
   // Fetch contacts
@@ -122,30 +172,96 @@ export default function NewCampaignPage() {
     }
   };
 
+  // Initialize customBodies when entering personalize step
+  const enterPersonalizeStep = () => {
+    // Capture editor HTML before unmounting it
+    const currentBody = editorRef.current ? editorRef.current.innerHTML : body;
+    setBody(currentBody);
+
+    const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+    const fullTemplate = currentBody + sigBlock;
+
+    // Pre-populate each recipient's custom body with the resolved template
+    const initial = {};
+    for (const person of recipientList) {
+      initial[person.id] = resolveTemplate(fullTemplate, person);
+    }
+    setCustomBodies(initial);
+    setEditingPersonId(recipientList[0]?.id || null);
+    setStep('personalize');
+  };
+
+  // Save the currently-editing person's body from the contentEditable
+  const saveCurrentPersonBody = () => {
+    if (personalizeEditorRef.current && editingPersonId) {
+      setCustomBodies((prev) => ({
+        ...prev,
+        [editingPersonId]: personalizeEditorRef.current.innerHTML,
+      }));
+    }
+  };
+
+  // Switch to a different person in the personalize step
+  const switchToPerson = (personId) => {
+    saveCurrentPersonBody();
+    setEditingPersonId(personId);
+  };
+
+  // When the personalizeEditorRef mounts or editingPersonId changes,
+  // populate the editor with that person's body
+  useEffect(() => {
+    if (step === 'personalize' && personalizeEditorRef.current && editingPersonId) {
+      personalizeEditorRef.current.innerHTML = customBodies[editingPersonId] || '';
+    }
+  }, [editingPersonId, step]);
+
   // Sending
   const handleSend = async () => {
+    // Save any in-progress edits from the personalize editor
+    saveCurrentPersonBody();
+
     setStep('sending');
-    setSendProgress(`Sending to ${selected.size} recipient${selected.size > 1 ? 's' : ''}…`);
+    setSendProgress(`Sending to ${recipientList.length} recipient${recipientList.length > 1 ? 's' : ''}...`);
 
     const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
     const fullBody = body + sigBlock;
 
+    // Build the final customBodies snapshot (grab latest from state)
+    const finalCustomBodies = { ...customBodies };
+    if (personalizeEditorRef.current && editingPersonId) {
+      finalCustomBodies[editingPersonId] = personalizeEditorRef.current.innerHTML;
+    }
+
     try {
+      const payload = {
+        campaignName: campaignName || subject,
+        subject,
+        bodyTemplate: fullBody,
+        recipients: recipientList,
+        pdfLink: pdfLink || undefined,
+        customBodies: finalCustomBodies,
+      };
+
+      // If resuming an existing campaign, pass its ID
+      if (existingCampaignId) {
+        payload.campaignId = existingCampaignId;
+      }
+
       const res = await fetch('/api/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          campaignName: campaignName || subject,
-          subject,
-          bodyTemplate: fullBody,
-          recipients: recipientList,
-          pdfLink: pdfLink || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (res.ok) {
-        setSendResult({ success: true, sent: data.sent, failed: data.failed, campaignId: data.campaignId });
+        setSendResult({
+          success: true,
+          sent: data.sent,
+          failed: data.failed,
+          skipped: data.skipped || 0,
+          campaignId: data.campaignId,
+        });
         setStep('done');
       } else {
         setSendResult({ success: false, error: data.error });
@@ -169,6 +285,9 @@ export default function NewCampaignPage() {
           {sendResult.failed > 0 && (
             <p className="text-sm text-red-600 mb-1">{sendResult.failed} failed</p>
           )}
+          {sendResult.skipped > 0 && (
+            <p className="text-sm text-gallery-mid mb-1">{sendResult.skipped} skipped (already sent)</p>
+          )}
           <p className="text-2xs text-gallery-light mt-1 mb-8">{campaignName || subject}</p>
           <div className="flex gap-3 justify-center">
             <a href={`/campaigns/${sendResult.campaignId}`} className="btn-primary">View Campaign</a>
@@ -182,13 +301,22 @@ export default function NewCampaignPage() {
   // ── Confirm ───────────────────────────────────────────────────────────────
   if (step === 'confirm' || step === 'sending') {
     const isSending = step === 'sending';
+    const editedCount = Object.keys(customBodies).filter((id) => {
+      // Count how many were actually edited vs the original resolved template
+      const person = recipientList.find((p) => p.id === id);
+      if (!person) return false;
+      const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+      const original = resolveTemplate(body + sigBlock, person);
+      return customBodies[id] !== original;
+    }).length;
+
     return (
       <div>
         <button
-          onClick={() => { if (!isSending) setStep('compose'); }}
+          onClick={() => { if (!isSending) setStep('personalize'); }}
           className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors mb-4 inline-block"
         >
-          ← Back to compose
+          ← Back to personalize
         </button>
         <h1 className="font-serif italic text-3xl mb-8">Confirm &amp; Send</h1>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -201,16 +329,25 @@ export default function NewCampaignPage() {
               <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Subject</div>
               <div className="text-base font-medium">{subject}</div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="stat-card">
                 <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Recipients</div>
-                <div className="text-2xl font-medium tabular-nums">{selected.size}</div>
+                <div className="text-2xl font-medium tabular-nums">{recipientList.length}</div>
+              </div>
+              <div className="stat-card">
+                <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Edited</div>
+                <div className="text-2xl font-medium tabular-nums">{editedCount}</div>
               </div>
               <div className="stat-card">
                 <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">PDF Link</div>
                 <div className="text-sm font-medium">{pdfLink ? 'Attached' : <span className="text-gallery-light">None</span>}</div>
               </div>
             </div>
+            {existingCampaignId && (
+              <div className="border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+                Adding to existing campaign. Already-sent recipients will be skipped automatically.
+              </div>
+            )}
             {sendResult && !sendResult.success && (
               <div className="border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                 Error: {sendResult.error}
@@ -221,7 +358,7 @@ export default function NewCampaignPage() {
               disabled={isSending}
               className="btn-primary w-full justify-center py-3 text-base disabled:opacity-40"
             >
-              {isSending ? sendProgress : `Send to ${selected.size} recipient${selected.size !== 1 ? 's' : ''}`}
+              {isSending ? sendProgress : `Send to ${recipientList.length} recipient${recipientList.length !== 1 ? 's' : ''}`}
             </button>
           </div>
           <div>
@@ -229,16 +366,132 @@ export default function NewCampaignPage() {
               Recipients ({recipientList.length})
             </div>
             <div className="border border-gallery-border bg-gallery-white max-h-[60vh] overflow-y-auto">
-              {recipientList.map((p, i) => (
-                <div key={p.email} className="flex items-center justify-between px-4 py-2.5 border-b border-gallery-border last:border-0">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{p.name} {p.surname}</div>
-                    <div className="text-2xs text-gallery-mid truncate">{p.email}</div>
+              {recipientList.map((p) => {
+                const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+                const original = resolveTemplate(body + sigBlock, p);
+                const wasEdited = customBodies[p.id] && customBodies[p.id] !== original;
+                return (
+                  <div key={p.email} className="flex items-center justify-between px-4 py-2.5 border-b border-gallery-border last:border-0">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{p.name} {p.surname}</div>
+                      <div className="text-2xs text-gallery-mid truncate">{p.email}</div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {wasEdited && (
+                        <span className="text-2xs text-gallery-accent font-medium">edited</span>
+                      )}
+                      {p.type && <span className="badge bg-gallery-accent-light text-gallery-accent">{p.type}</span>}
+                    </div>
                   </div>
-                  {p.type && <span className="badge bg-gallery-accent-light text-gallery-accent flex-shrink-0">{p.type}</span>}
-                </div>
-              ))}
+                );
+              })}
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Personalize — per-recipient body editing ──────────────────────────────
+  if (step === 'personalize') {
+    const currentPerson = recipientList.find((p) => p.id === editingPersonId);
+
+    return (
+      <div>
+        <button
+          onClick={() => setStep('compose')}
+          className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors mb-4 inline-block"
+        >
+          ← Back to compose
+        </button>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="font-serif italic text-3xl mb-1">Personalize</h1>
+            <p className="text-sm text-gallery-mid">
+              Edit individual messages before sending. Click a name to customize their email.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              saveCurrentPersonBody();
+              setStep('confirm');
+            }}
+            className="btn-primary py-2.5 px-6"
+          >
+            Review &amp; Send ({recipientList.length})
+          </button>
+        </div>
+
+        <div
+          className="flex gap-0 border border-gallery-border bg-gallery-white"
+          style={{ height: 'calc(100vh - 200px)' }}
+        >
+          {/* Left: recipient list */}
+          <div
+            className="flex flex-col border-r border-gallery-border flex-shrink-0 overflow-y-auto"
+            style={{ width: 240 }}
+          >
+            {recipientList.map((p) => {
+              const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+              const original = resolveTemplate(body + sigBlock, p);
+              const wasEdited = customBodies[p.id] && customBodies[p.id] !== original;
+              const isActive = p.id === editingPersonId;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => switchToPerson(p.id)}
+                  className={`text-left px-4 py-3 border-b border-gallery-border transition-colors ${
+                    isActive ? 'bg-gallery-accent-light' : 'hover:bg-gallery-bg'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-medium truncate">{p.surname}, {p.name}</div>
+                    {wasEdited && (
+                      <span className="w-2 h-2 rounded-full bg-gallery-accent flex-shrink-0 ml-2" title="Edited" />
+                    )}
+                  </div>
+                  <div className="text-2xs text-gallery-mid truncate">{p.email}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right: editor for selected person */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {currentPerson && (
+              <>
+                <div className="flex items-center justify-between px-6 py-3 border-b border-gallery-border bg-gallery-bg">
+                  <div>
+                    <span className="text-sm font-medium">{currentPerson.name} {currentPerson.surname}</span>
+                    <span className="text-2xs text-gallery-mid ml-3">{currentPerson.email}</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      // Reset this person to the original template
+                      const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+                      const original = resolveTemplate(body + sigBlock, currentPerson);
+                      setCustomBodies((prev) => ({ ...prev, [currentPerson.id]: original }));
+                      if (personalizeEditorRef.current) {
+                        personalizeEditorRef.current.innerHTML = original;
+                      }
+                    }}
+                    className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors"
+                  >
+                    Reset to template
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto px-6 py-5">
+                  <div
+                    ref={personalizeEditorRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={() => saveCurrentPersonBody()}
+                    className="outline-none text-sm leading-relaxed text-gallery-black min-h-[200px] font-sans"
+                    style={{ fontFamily: 'DM Sans, sans-serif' }}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -265,7 +518,7 @@ export default function NewCampaignPage() {
           <input
             type="text"
             className="input-field text-xs py-1.5"
-            placeholder="Search…"
+            placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -301,43 +554,52 @@ export default function NewCampaignPage() {
         {/* Contact list */}
         <div className="flex-1 overflow-y-auto">
           {loadingPeople ? (
-            <div className="p-6 text-center text-2xs text-gallery-light">Loading…</div>
+            <div className="p-6 text-center text-2xs text-gallery-light">Loading...</div>
           ) : filteredPeople.length === 0 ? (
             <div className="p-6 text-center text-2xs text-gallery-light">No contacts found</div>
           ) : (
-            filteredPeople.map((person) => (
-              <label
-                key={person.email}
-                className={`flex items-center gap-2.5 px-3 py-2.5 border-b border-gallery-border cursor-pointer transition-colors ${
-                  selected.has(person.email) ? 'bg-gallery-accent-light' : 'hover:bg-gallery-bg'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.has(person.email)}
-                  onChange={() => toggleSelect(person.email)}
-                  className="accent-gallery-accent flex-shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium truncate">{person.surname}, {person.name}</div>
-                  <div className="text-2xs text-gallery-mid truncate">{person.email}</div>
-                </div>
-                {selected.has(person.email) && (
-                  <span className="badge bg-gallery-accent text-white flex-shrink-0" style={{ fontSize: '0.5rem' }}>sent</span>
-                )}
-              </label>
-            ))
+            filteredPeople.map((person) => {
+              const wasSent = alreadySentEmails.has(person.email);
+              return (
+                <label
+                  key={person.email}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 border-b border-gallery-border cursor-pointer transition-colors ${
+                    selected.has(person.email)
+                      ? 'bg-gallery-accent-light'
+                      : wasSent
+                        ? 'bg-gray-50 opacity-60'
+                        : 'hover:bg-gallery-bg'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(person.email)}
+                    onChange={() => toggleSelect(person.email)}
+                    className="accent-gallery-accent flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium truncate">{person.surname}, {person.name}</div>
+                    <div className="text-2xs text-gallery-mid truncate">{person.email}</div>
+                  </div>
+                  {wasSent && (
+                    <span className="text-2xs text-gallery-light flex-shrink-0">sent</span>
+                  )}
+                </label>
+              );
+            })
           )}
         </div>
 
-        {/* Send All button */}
+        {/* Next button */}
         <div className="p-3 border-t border-gallery-border">
           <button
-            onClick={() => canSend && setStep('confirm')}
+            onClick={() => canSend && enterPersonalizeStep()}
             disabled={!canSend}
             className="btn-primary w-full justify-center py-2.5 text-xs disabled:opacity-40"
           >
-            {selected.size === 0 ? 'Select contacts' : `Send All (${selected.size})`}
+            {selected.size === 0
+              ? 'Select contacts'
+              : `Personalize (${selected.size})`}
           </button>
         </div>
       </div>
@@ -355,13 +617,19 @@ export default function NewCampaignPage() {
             onChange={(e) => setCampaignName(e.target.value)}
             placeholder="e.g. Opening Week — True as Good"
             className="flex-1 text-xs bg-transparent border-none outline-none text-gallery-black placeholder:text-gallery-light"
+            disabled={!!existingCampaignId}
           />
+          {existingCampaignId && (
+            <span className="text-2xs text-blue-600 bg-blue-50 px-2 py-0.5 flex-shrink-0">
+              Adding recipients
+            </span>
+          )}
           {pdfLink && (
             <button
               onClick={() => setPdfLink('')}
               className="text-2xs text-gallery-accent bg-gallery-accent-light px-2 py-0.5 flex-shrink-0"
             >
-              PDF attached ×
+              PDF attached x
             </button>
           )}
         </div>
@@ -385,7 +653,7 @@ export default function NewCampaignPage() {
         <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gallery-border">
           <span className="text-sm text-gallery-mid w-6 flex-shrink-0">Bcc</span>
           <input
-            placeholder="Add bcc…"
+            placeholder="Add bcc..."
             className="flex-1 text-sm bg-transparent border-none outline-none text-gallery-black placeholder:text-gallery-light"
           />
         </div>
@@ -395,7 +663,7 @@ export default function NewCampaignPage() {
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            placeholder="Subject line…"
+            placeholder="Subject line..."
             className="flex-1 text-base font-medium bg-transparent border-none outline-none text-gallery-black placeholder:text-gallery-light"
           />
         </div>
@@ -419,7 +687,7 @@ export default function NewCampaignPage() {
           <div className="w-px h-5 bg-gallery-border mx-1" />
 
           {[
-            { label: '• List', cmd: 'insertUnorderedList' },
+            { label: '- List', cmd: 'insertUnorderedList' },
             { label: '1. List', cmd: 'insertOrderedList' },
           ].map((b) => (
             <button
@@ -467,6 +735,7 @@ export default function NewCampaignPage() {
             onBlur={(e) => setBody(e.currentTarget.innerHTML)}
             className="outline-none text-sm leading-relaxed text-gallery-black min-h-[200px] font-sans"
             style={{ fontFamily: 'DM Sans, sans-serif' }}
+            dangerouslySetInnerHTML={existingCampaignId && body ? { __html: body } : undefined}
           />
         </div>
 
