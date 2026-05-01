@@ -125,21 +125,31 @@ export default function CampaignDetailPage() {
             <p className="text-sm text-gallery-mid">{campaign.subject}</p>
           )}
         </div>
-        {campaign?.status && (
-          <span
-            className={`flex-shrink-0 mt-1 ${
-              campaign.status === 'Sent'
-                ? 'badge-sent'
-                : campaign.status === 'Sending'
-                  ? 'badge bg-yellow-50 text-yellow-700'
-                  : campaign.status === 'Partial'
-                    ? 'badge bg-orange-50 text-orange-700'
-                    : 'badge bg-gray-50 text-gallery-mid'
-            }`}
-          >
-            {campaign.status}
-          </span>
-        )}
+        <div className="flex items-center gap-3 flex-shrink-0 mt-1">
+          {(campaign?.status === 'Sent' || campaign?.status === 'Partial') && (
+            <a
+              href={`/campaigns/new?campaign=${params.id}`}
+              className="btn-secondary text-xs py-1.5 px-4"
+            >
+              + Add Recipients
+            </a>
+          )}
+          {campaign?.status && (
+            <span
+              className={`${
+                campaign.status === 'Sent'
+                  ? 'badge-sent'
+                  : campaign.status === 'Sending'
+                    ? 'badge bg-yellow-50 text-yellow-700'
+                    : campaign.status === 'Partial'
+                      ? 'badge bg-orange-50 text-orange-700'
+                      : 'badge bg-gray-50 text-gallery-mid'
+              }`}
+            >
+              {campaign.status}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── Stats row ────────────────────────────────────────────────────── */}
