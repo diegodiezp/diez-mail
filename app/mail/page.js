@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// HTML signature for replies (same as campaigns)
 const SIGNATURE_HTML = [
   `<div>Diego Diez</div>`,
   `<div>Director of <a href="https://diez.gallery" style="color:#1a1a1a;text-decoration:underline;">diez</a></div>`,
@@ -15,28 +14,25 @@ function formatDate(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   const now = new Date();
-  const diffMs = now - d;
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffDays === 0) {
-    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  }
+  const diffDays = Math.floor((now - d) / 86400000);
+  if (diffDays === 0) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) {
-    return d.toLocaleDateString('en-GB', { weekday: 'short' });
-  }
+  if (diffDays < 7) return d.toLocaleDateString('en-GB', { weekday: 'short' });
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
 function formatFullDate(dateStr) {
   if (!dateStr) return '';
   return new Date(dateStr).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const TYPE_COLORS = {
@@ -55,10 +51,7 @@ function ContactBadge({ contact }) {
   return (
     <span className="flex gap-1">
       {types.map((t) => (
-        <span
-          key={t}
-          className={`text-2xs px-1.5 py-0.5 ${TYPE_COLORS[t] || 'bg-gray-50 text-gallery-mid'}`}
-        >
+        <span key={t} className={`text-2xs px-1.5 py-0.5 ${TYPE_COLORS[t] || 'bg-gray-50 text-gallery-mid'}`}>
           {t}
         </span>
       ))}
@@ -67,7 +60,7 @@ function ContactBadge({ contact }) {
 }
 
 export default function MailPage() {
-  // Thread list state
+  // Thread list
   const [threads, setThreads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,39 +68,46 @@ export default function MailPage() {
   const [nextPageToken, setNextPageToken] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // Selected thread state
+  // Thread detail
   const [selectedThreadId, setSelectedThreadId] = useState(null);
   const [threadMessages, setThreadMessages] = useState([]);
   const [loadingThread, setLoadingThread] = useState(false);
-  const [trashing, setTrashing] = useState(false);
 
-  // Reply state
+  // Reply
   const [showReply, setShowReply] = useState(false);
-  const [replyBody, setReplyBody] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const [replyResult, setReplyResult] = useState(null);
   const [includeSig, setIncludeSig] = useState(true);
   const replyEditorRef = useRef(null);
 
-  // Fetch threads
+  // Compose (new / forward)
+  const [composeMode, setComposeMode] = useState(null); // null | 'new' | 'forward'
+  const [composeTo, setComposeTo] = useState('');
+  const [composeSubject, setComposeSubject] = useState('');
+  const [composeIncludeSig, setComposeIncludeSig] = useState(true);
+  const [sendingCompose, setSendingCompose] = useState(false);
+  const [composeResult, setComposeResult] = useState(null);
+  const composeEditorRef = useRef(null);
+
+  // Thread actions
+  const [trashing, setTrashing] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+
+  const senderEmail = 'diego@diez.gallery';
+
+  // ── Fetch threads ────────────────────────────────────────────────────────
   const fetchThreads = useCallback(async (append = false, token = null) => {
     if (append) setLoadingMore(true);
     else setLoading(true);
-
     try {
       const params = new URLSearchParams();
       if (searchQuery) params.set('q', searchQuery);
       if (label) params.set('label', label);
       if (token) params.set('pageToken', token);
-
       const res = await fetch(`/api/mail/threads?${params}`);
       const data = await res.json();
-
-      if (append) {
-        setThreads((prev) => [...prev, ...(data.threads || [])]);
-      } else {
-        setThreads(data.threads || []);
-      }
+      if (append) setThreads((prev) => [...prev, ...(data.threads || [])]);
+      else setThreads(data.threads || []);
       setNextPageToken(data.nextPageToken || null);
     } catch (err) {
       console.error('Failed to load threads:', err);
@@ -117,19 +117,18 @@ export default function MailPage() {
     }
   }, [searchQuery, label]);
 
-  // Initial load + when label/search changes
   useEffect(() => {
     const debounce = setTimeout(() => fetchThreads(), 300);
     return () => clearTimeout(debounce);
   }, [fetchThreads]);
 
-  // Load thread detail
+  // ── Load thread detail ───────────────────────────────────────────────────
   useEffect(() => {
     if (!selectedThreadId) return;
     setLoadingThread(true);
     setShowReply(false);
     setReplyResult(null);
-
+    setComposeMode(null);
     fetch(`/api/mail/${selectedThreadId}`)
       .then((r) => r.json())
       .then((data) => {
@@ -139,49 +138,23 @@ export default function MailPage() {
       .catch(() => setLoadingThread(false));
   }, [selectedThreadId]);
 
-  // Move to trash
-  const handleTrash = async () => {
-    if (!selectedThreadId) return;
-    if (!window.confirm('Move this conversation to trash?')) return;
-    setTrashing(true);
-    try {
-      await fetch(`/api/mail/${selectedThreadId}`, { method: 'DELETE' });
-      setSelectedThreadId(null);
-      setThreadMessages([]);
-      fetchThreads();
-    } catch (err) {
-      console.error('Trash failed:', err);
-    } finally {
-      setTrashing(false);
-    }
-  };
-
-  // Send reply
+  // ── Reply ────────────────────────────────────────────────────────────────
   const handleReply = async () => {
     if (!replyEditorRef.current) return;
     const html = replyEditorRef.current.innerHTML;
     if (!html.trim()) return;
-
     const lastMsg = threadMessages[threadMessages.length - 1];
     if (!lastMsg) return;
-
-    // Determine who we're replying to
-    const senderEmail = process.env.NEXT_PUBLIC_SENDER_EMAIL || 'diego@diez.gallery';
     const replyTo =
       lastMsg.from.email?.toLowerCase() === senderEmail.toLowerCase()
         ? lastMsg.to.split(',')[0].trim()
         : lastMsg.from.email;
-
-    // Parse just the email from "Name <email>" format
     const emailMatch = replyTo.match(/<(.+?)>/);
     const toEmail = emailMatch ? emailMatch[1] : replyTo;
-
     const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
     const fullBody = html + sigBlock;
-
     setSendingReply(true);
     setReplyResult(null);
-
     try {
       const res = await fetch('/api/mail/reply', {
         method: 'POST',
@@ -193,12 +166,10 @@ export default function MailPage() {
           htmlBody: fullBody,
         }),
       });
-
       const data = await res.json();
       if (res.ok) {
         setReplyResult({ success: true });
         setShowReply(false);
-        // Reload thread to see the sent reply
         setTimeout(() => {
           fetch(`/api/mail/${selectedThreadId}`)
             .then((r) => r.json())
@@ -214,7 +185,120 @@ export default function MailPage() {
     }
   };
 
-  const senderEmail = 'diego@diez.gallery';
+  // ── Trash ────────────────────────────────────────────────────────────────
+  const handleTrash = async () => {
+    if (!window.confirm('Move this conversation to trash?')) return;
+    setTrashing(true);
+    try {
+      await fetch(`/api/mail/${selectedThreadId}`, { method: 'DELETE' });
+      setSelectedThreadId(null);
+      setThreadMessages([]);
+      fetchThreads();
+    } catch (err) {
+      console.error('Trash failed:', err);
+    } finally {
+      setTrashing(false);
+    }
+  };
+
+  // ── Archive ──────────────────────────────────────────────────────────────
+  const handleArchive = async () => {
+    setArchiving(true);
+    try {
+      await fetch(`/api/mail/${selectedThreadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'archive' }),
+      });
+      setSelectedThreadId(null);
+      setThreadMessages([]);
+      fetchThreads();
+    } catch (err) {
+      console.error('Archive failed:', err);
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  // ── Mark read / unread ───────────────────────────────────────────────────
+  const handleMarkReadUnread = async (makeUnread) => {
+    await fetch(`/api/mail/${selectedThreadId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: makeUnread ? 'markUnread' : 'markRead' }),
+    });
+    setThreadMessages((prev) => prev.map((msg) => ({ ...msg, isUnread: makeUnread })));
+    setThreads((prev) =>
+      prev.map((t) => (t.id === selectedThreadId ? { ...t, isUnread: makeUnread } : t))
+    );
+  };
+
+  // ── Compose ──────────────────────────────────────────────────────────────
+  const openCompose = (mode = 'new', forwardMsg = null) => {
+    setComposeMode(mode);
+    setSelectedThreadId(null);
+    setComposeResult(null);
+    if (mode === 'forward' && forwardMsg) {
+      setComposeTo('');
+      setComposeSubject(`Fwd: ${forwardMsg.subject || ''}`);
+      setTimeout(() => {
+        if (composeEditorRef.current) {
+          composeEditorRef.current.innerHTML = [
+            '<br/><br/>',
+            '<div style="border-left:3px solid #e0e0e0;padding-left:12px;color:#555;margin-top:16px">',
+            '<p style="margin:0 0 4px;font-size:13px">———— Forwarded message ————</p>',
+            `<p style="margin:0 0 2px;font-size:13px"><strong>From:</strong> ${forwardMsg.from.name || forwardMsg.from.email} &lt;${forwardMsg.from.email}&gt;</p>`,
+            `<p style="margin:0 0 2px;font-size:13px"><strong>Date:</strong> ${forwardMsg.date}</p>`,
+            `<p style="margin:0 0 8px;font-size:13px"><strong>Subject:</strong> ${forwardMsg.subject}</p>`,
+            forwardMsg.htmlBody || `<p>${forwardMsg.textBody || forwardMsg.snippet}</p>`,
+            '</div>',
+          ].join('');
+        }
+      }, 100);
+    } else {
+      setComposeTo('');
+      setComposeSubject('');
+      setTimeout(() => {
+        if (composeEditorRef.current) {
+          composeEditorRef.current.innerHTML = '';
+          composeEditorRef.current.focus();
+        }
+      }, 100);
+    }
+  };
+
+  const handleCompose = async () => {
+    if (!composeEditorRef.current) return;
+    const html = composeEditorRef.current.innerHTML;
+    if (!html.trim() || !composeTo || !composeSubject) return;
+    const sigBlock = composeIncludeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+    const fullBody = html + sigBlock;
+    setSendingCompose(true);
+    setComposeResult(null);
+    try {
+      const res = await fetch('/api/mail/compose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: composeTo, subject: composeSubject, htmlBody: fullBody }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setComposeResult({ success: true });
+        setTimeout(() => {
+          setComposeMode(null);
+          if (label === 'SENT') fetchThreads();
+        }, 1500);
+      } else {
+        setComposeResult({ success: false, error: data.error });
+      }
+    } catch (err) {
+      setComposeResult({ success: false, error: err.message });
+    } finally {
+      setSendingCompose(false);
+    }
+  };
+
+  const isThreadUnread = threadMessages[threadMessages.length - 1]?.isUnread ?? false;
 
   return (
     <div
@@ -226,8 +310,17 @@ export default function MailPage() {
         className="flex flex-col border-r border-gallery-border bg-gallery-white flex-shrink-0"
         style={{ width: 360 }}
       >
-        {/* Search + label tabs */}
+        {/* Compose + search + tabs */}
         <div className="px-4 py-3 border-b border-gallery-border">
+          <button
+            onClick={() => openCompose('new')}
+            className="btn-primary text-xs py-2 px-4 w-full mb-3 flex items-center justify-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Compose
+          </button>
           <input
             type="text"
             className="input-field text-xs py-1.5 mb-2 w-full"
@@ -239,10 +332,7 @@ export default function MailPage() {
             {['INBOX', 'SENT'].map((l) => (
               <button
                 key={l}
-                onClick={() => {
-                  setLabel(l);
-                  setSelectedThreadId(null);
-                }}
+                onClick={() => { setLabel(l); setSelectedThreadId(null); setComposeMode(null); }}
                 className={`text-2xs px-3 py-1 transition-colors ${
                   label === l
                     ? 'bg-gallery-black text-white'
@@ -271,7 +361,6 @@ export default function MailPage() {
                   : (t.contact
                     ? `${t.contact.name} ${t.contact.surname}`.trim()
                     : t.from.name || t.from.email);
-
                 return (
                   <button
                     key={t.id}
@@ -280,45 +369,29 @@ export default function MailPage() {
                       isSelected
                         ? 'bg-gallery-accent-light'
                         : t.isUnread
-                          ? 'bg-white hover:bg-gallery-bg'
-                          : 'hover:bg-gallery-bg'
+                        ? 'bg-white hover:bg-gallery-bg'
+                        : 'hover:bg-gallery-bg'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2 mb-0.5">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span
-                          className={`text-xs truncate ${
-                            t.isUnread ? 'font-semibold text-gallery-black' : 'font-medium text-gallery-dark'
-                          }`}
-                        >
+                        <span className={`text-xs truncate ${t.isUnread ? 'font-semibold text-gallery-black' : 'font-medium text-gallery-dark'}`}>
                           {displayName}
                         </span>
                         {t.messageCount > 1 && (
-                          <span className="text-2xs text-gallery-light flex-shrink-0">
-                            ({t.messageCount})
-                          </span>
+                          <span className="text-2xs text-gallery-light flex-shrink-0">({t.messageCount})</span>
                         )}
                         <ContactBadge contact={t.contact} />
                       </div>
-                      <span className="text-2xs text-gallery-light flex-shrink-0">
-                        {formatDate(t.date)}
-                      </span>
+                      <span className="text-2xs text-gallery-light flex-shrink-0">{formatDate(t.date)}</span>
                     </div>
-                    <div
-                      className={`text-2xs truncate ${
-                        t.isUnread ? 'font-medium text-gallery-dark' : 'text-gallery-mid'
-                      }`}
-                    >
+                    <div className={`text-2xs truncate ${t.isUnread ? 'font-medium text-gallery-dark' : 'text-gallery-mid'}`}>
                       {t.subject}
                     </div>
-                    <div className="text-2xs text-gallery-light truncate mt-0.5">
-                      {t.snippet}
-                    </div>
+                    <div className="text-2xs text-gallery-light truncate mt-0.5">{t.snippet}</div>
                   </button>
                 );
               })}
-
-              {/* Load more */}
               {nextPageToken && (
                 <div className="p-3 text-center">
                   <button
@@ -345,16 +418,100 @@ export default function MailPage() {
         </div>
       </div>
 
-      {/* ── RIGHT: Thread detail ──────────────────────────────────────── */}
+      {/* ── RIGHT: Compose / Thread detail / Empty ────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden bg-gallery-white">
-        {!selectedThreadId ? (
+
+        {/* COMPOSE PANEL */}
+        {composeMode ? (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-gallery-border flex items-center justify-between">
+              <h2 className="text-base font-medium text-gallery-black">
+                {composeMode === 'forward' ? 'Forward' : 'New Message'}
+              </h2>
+              <button
+                onClick={() => setComposeMode(null)}
+                className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto flex flex-col">
+              <div className="border-b border-gallery-border px-6 py-3">
+                <input
+                  type="text"
+                  placeholder="To"
+                  value={composeTo}
+                  onChange={(e) => setComposeTo(e.target.value)}
+                  className="w-full text-sm outline-none text-gallery-black placeholder:text-gallery-light bg-transparent"
+                />
+              </div>
+              <div className="border-b border-gallery-border px-6 py-3">
+                <input
+                  type="text"
+                  placeholder="Subject"
+                  value={composeSubject}
+                  onChange={(e) => setComposeSubject(e.target.value)}
+                  className="w-full text-sm outline-none text-gallery-black placeholder:text-gallery-light bg-transparent"
+                />
+              </div>
+              <div className="flex-1 px-6 py-4">
+                <div
+                  ref={composeEditorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  className="outline-none text-sm leading-relaxed text-gallery-black min-h-[200px] font-sans"
+                  style={{ fontFamily: 'DM Sans, sans-serif' }}
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-gallery-border px-6 py-3">
+              {composeResult?.success && (
+                <div className="mb-2 text-sm text-gallery-success">Sent successfully</div>
+              )}
+              {composeResult && !composeResult.success && (
+                <div className="mb-2 text-sm text-red-600">Error: {composeResult.error}</div>
+              )}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={handleCompose}
+                    disabled={sendingCompose || !composeTo || !composeSubject}
+                    className="btn-primary text-xs py-2 px-6 disabled:opacity-40"
+                  >
+                    {sendingCompose ? 'Sending...' : 'Send'}
+                  </button>
+                  <button
+                    onClick={() => setComposeMode(null)}
+                    className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors"
+                  >
+                    Discard
+                  </button>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={composeIncludeSig}
+                    onChange={(e) => setComposeIncludeSig(e.target.checked)}
+                    className="accent-gallery-accent"
+                  />
+                  <span className="text-2xs text-gallery-mid">Signature</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+        ) : !selectedThreadId ? (
           <div className="flex-1 flex items-center justify-center text-sm text-gallery-light">
             Select a conversation
           </div>
+
         ) : loadingThread ? (
           <div className="flex-1 flex items-center justify-center text-sm text-gallery-light">
             Loading...
           </div>
+
         ) : (
           <>
             {/* Thread header */}
@@ -367,40 +524,64 @@ export default function MailPage() {
                   {threadMessages.length} message{threadMessages.length !== 1 ? 's' : ''}
                 </div>
               </div>
-              <button
-                onClick={handleTrash}
-                disabled={trashing}
-                className="flex-shrink-0 text-gallery-light hover:text-red-500 transition-colors disabled:opacity-40 mt-1"
-                title="Move to trash"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14H6L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4h6v2" />
-                </svg>
-              </button>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-3 flex-shrink-0 mt-1">
+                {/* Mark read/unread */}
+                <button
+                  onClick={() => handleMarkReadUnread(!isThreadUnread)}
+                  className="text-gallery-light hover:text-gallery-black transition-colors"
+                  title={isThreadUnread ? 'Mark as read' : 'Mark as unread'}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                    <polyline points="22,6 12,13 2,6" />
+                  </svg>
+                </button>
+
+                {/* Archive */}
+                <button
+                  onClick={handleArchive}
+                  disabled={archiving}
+                  className="text-gallery-light hover:text-gallery-black transition-colors disabled:opacity-40"
+                  title="Archive"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="21 8 21 21 3 21 3 8" />
+                    <rect x="1" y="3" width="22" height="5" />
+                    <line x1="10" y1="12" x2="14" y2="12" />
+                  </svg>
+                </button>
+
+                {/* Trash */}
+                <button
+                  onClick={handleTrash}
+                  disabled={trashing}
+                  className="text-gallery-light hover:text-red-500 transition-colors disabled:opacity-40"
+                  title="Move to trash"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                    <path d="M9 6V4h6v2" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto">
-              {threadMessages.map((msg, idx) => {
+              {threadMessages.map((msg) => {
                 const isMe = msg.from.email?.toLowerCase() === senderEmail.toLowerCase();
                 return (
-                  <div
-                    key={msg.id}
-                    className="px-6 py-5 border-b border-gallery-border"
-                  >
+                  <div key={msg.id} className="px-6 py-5 border-b border-gallery-border">
                     {/* Message header */}
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="flex items-center gap-2">
-                        <div
-                          className={`w-8 h-8 flex items-center justify-center text-xs font-medium flex-shrink-0 ${
-                            isMe
-                              ? 'bg-gallery-accent text-white'
-                              : 'bg-gallery-bg text-gallery-mid border border-gallery-border'
-                          }`}
-                        >
+                        <div className={`w-8 h-8 flex items-center justify-center text-xs font-medium flex-shrink-0 ${
+                          isMe ? 'bg-gallery-accent text-white' : 'bg-gallery-bg text-gallery-mid border border-gallery-border'
+                        }`}>
                           {isMe ? 'DD' : (msg.from.name?.[0] || '?').toUpperCase()}
                         </div>
                         <div>
@@ -412,12 +593,24 @@ export default function MailPage() {
                           </div>
                           <div className="text-2xs text-gallery-light">
                             to {isMe ? msg.to : 'me'}
+                            {msg.cc && <span className="ml-1">· cc {msg.cc}</span>}
                           </div>
                         </div>
                       </div>
-                      <span className="text-2xs text-gallery-light flex-shrink-0">
-                        {formatFullDate(msg.date)}
-                      </span>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-2xs text-gallery-light">{formatFullDate(msg.date)}</span>
+                        {/* Forward per message */}
+                        <button
+                          onClick={() => openCompose('forward', { ...msg, subject: threadMessages[0]?.subject })}
+                          className="text-gallery-light hover:text-gallery-black transition-colors"
+                          title="Forward"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="15 10 20 15 15 20" />
+                            <path d="M4 4v7a4 4 0 0 0 4 4h12" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Message body */}
@@ -432,6 +625,32 @@ export default function MailPage() {
                         {msg.textBody || msg.snippet}
                       </div>
                     )}
+
+                    {/* Attachments */}
+                    {msg.attachments?.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gallery-border">
+                        <div className="text-2xs text-gallery-mid mb-2">
+                          {msg.attachments.length} attachment{msg.attachments.length !== 1 ? 's' : ''}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {msg.attachments.map((att) => (
+                            <a
+                              key={att.id}
+                              href={`/api/mail/attachment?messageId=${msg.id}&attachmentId=${encodeURIComponent(att.id)}&filename=${encodeURIComponent(att.filename)}&mimeType=${encodeURIComponent(att.mimeType)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 px-3 py-2 border border-gallery-border text-xs text-gallery-dark hover:bg-gallery-bg transition-colors"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                              </svg>
+                              <span className="max-w-[160px] truncate">{att.filename}</span>
+                              <span className="text-gallery-light flex-shrink-0">{formatFileSize(att.size)}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -440,18 +659,14 @@ export default function MailPage() {
             {/* Reply area */}
             <div className="border-t border-gallery-border">
               {replyResult?.success && (
-                <div className="px-6 py-2 bg-green-50 text-sm text-gallery-success">
-                  Reply sent with tracking
-                </div>
+                <div className="px-6 py-2 bg-green-50 text-sm text-gallery-success">Reply sent with tracking</div>
               )}
               {replyResult && !replyResult.success && (
-                <div className="px-6 py-2 bg-red-50 text-sm text-red-700">
-                  Error: {replyResult.error}
-                </div>
+                <div className="px-6 py-2 bg-red-50 text-sm text-red-700">Error: {replyResult.error}</div>
               )}
 
               {!showReply ? (
-                <div className="px-6 py-3">
+                <div className="px-6 py-3 flex items-center gap-3">
                   <button
                     onClick={() => {
                       setShowReply(true);
@@ -461,6 +676,15 @@ export default function MailPage() {
                     className="btn-secondary text-xs py-2 px-4"
                   >
                     Reply (with tracking)
+                  </button>
+                  <button
+                    onClick={() => openCompose('forward', {
+                      ...threadMessages[threadMessages.length - 1],
+                      subject: threadMessages[0]?.subject,
+                    })}
+                    className="text-xs text-gallery-mid hover:text-gallery-black transition-colors py-2 px-3 border border-gallery-border"
+                  >
+                    Forward
                   </button>
                 </div>
               ) : (
@@ -472,7 +696,6 @@ export default function MailPage() {
                       suppressContentEditableWarning
                       className="outline-none text-sm leading-relaxed text-gallery-black p-4 min-h-[120px] font-sans"
                       style={{ fontFamily: 'DM Sans, sans-serif' }}
-                      onInput={(e) => setReplyBody(e.currentTarget.innerHTML)}
                     />
                   </div>
                   <div className="flex items-center justify-between">
