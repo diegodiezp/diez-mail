@@ -79,6 +79,7 @@ export default function MailPage() {
   const [selectedThreadId, setSelectedThreadId] = useState(null);
   const [threadMessages, setThreadMessages] = useState([]);
   const [loadingThread, setLoadingThread] = useState(false);
+  const [trashing, setTrashing] = useState(false);
 
   // Reply state
   const [showReply, setShowReply] = useState(false);
@@ -137,6 +138,23 @@ export default function MailPage() {
       })
       .catch(() => setLoadingThread(false));
   }, [selectedThreadId]);
+
+  // Move to trash
+  const handleTrash = async () => {
+    if (!selectedThreadId) return;
+    if (!window.confirm('Move this conversation to trash?')) return;
+    setTrashing(true);
+    try {
+      await fetch(`/api/mail/${selectedThreadId}`, { method: 'DELETE' });
+      setSelectedThreadId(null);
+      setThreadMessages([]);
+      fetchThreads();
+    } catch (err) {
+      console.error('Trash failed:', err);
+    } finally {
+      setTrashing(false);
+    }
+  };
 
   // Send reply
   const handleReply = async () => {
@@ -340,13 +358,28 @@ export default function MailPage() {
         ) : (
           <>
             {/* Thread header */}
-            <div className="px-6 py-4 border-b border-gallery-border">
-              <h2 className="text-lg font-medium text-gallery-black">
-                {threadMessages[0]?.subject || '(no subject)'}
-              </h2>
-              <div className="text-2xs text-gallery-mid mt-1">
-                {threadMessages.length} message{threadMessages.length !== 1 ? 's' : ''}
+            <div className="px-6 py-4 border-b border-gallery-border flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-medium text-gallery-black">
+                  {threadMessages[0]?.subject || '(no subject)'}
+                </h2>
+                <div className="text-2xs text-gallery-mid mt-1">
+                  {threadMessages.length} message{threadMessages.length !== 1 ? 's' : ''}
+                </div>
               </div>
+              <button
+                onClick={handleTrash}
+                disabled={trashing}
+                className="flex-shrink-0 text-gallery-light hover:text-red-500 transition-colors disabled:opacity-40 mt-1"
+                title="Move to trash"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14H6L5 6" />
+                  <path d="M10 11v6M14 11v6" />
+                  <path d="M9 6V4h6v2" />
+                </svg>
+              </button>
             </div>
 
             {/* Messages */}
