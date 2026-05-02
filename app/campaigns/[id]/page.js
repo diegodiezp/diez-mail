@@ -208,7 +208,7 @@ export default function CampaignDetailPage() {
       )}
 
       {/* ── Recipients table ─────────────────────────────────────────────── */}
-      <div className="border border-gallery-border bg-gallery-white">
+      <div className="overflow-x-auto border border-gallery-border bg-gallery-white">
         <div className="px-5 py-3 border-b border-gallery-border flex items-center justify-between gap-4">
           <span className="text-2xs font-medium uppercase tracking-wider text-gallery-mid">
             Recipients ({recipients.length})
@@ -264,12 +264,12 @@ export default function CampaignDetailPage() {
               </div>
 
               <div className="text-right w-12 flex-shrink-0">
-                <div className="text-sm font-medium tabular-nums">{r.opens}</div>
+                <div className="text-xs sm:text-sm font-medium tabular-nums">{r.opens}</div>
                 <div className="text-2xs text-gallery-light">opens</div>
               </div>
 
               <div className="text-right w-12 flex-shrink-0">
-                <div className="text-sm font-medium tabular-nums">{r.clicks || 0}</div>
+                <div className="text-xs sm:text-sm font-medium tabular-nums">{r.clicks || 0}</div>
                 <div className="text-2xs text-gallery-light">clicks</div>
               </div>
 
