@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 
 function formatDate(iso) {
   if (!iso) return '-';
@@ -222,22 +223,35 @@ export default function ContactsPage() {
                       {selectedContact.company}
                     </div>
                   )}
-                  <div className="flex gap-2 mt-2 flex-wrap">
-                    {selectedContact.type && (
-                      <span className="badge-client">{selectedContact.type}</span>
-                    )}
-                    {selectedContact.status && (
-                      <span
-                        className={`badge ${
-                          selectedContact.status === 'Hot'
-                            ? 'bg-red-50 text-red-700'
-                            : selectedContact.status === 'Warm'
-                              ? 'bg-orange-50 text-orange-700'
-                              : 'bg-gray-100 text-gallery-mid'
-                        }`}
+                  <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
+                    <div className="flex gap-2 flex-wrap">
+                      {selectedContact.type && (
+                        <span className="badge-client">{selectedContact.type}</span>
+                      )}
+                      {selectedContact.status && (
+                        <span
+                          className={`badge ${
+                            selectedContact.status === 'Hot'
+                              ? 'bg-red-50 text-red-700'
+                              : selectedContact.status === 'Warm'
+                                ? 'bg-orange-50 text-orange-700'
+                                : 'bg-gray-100 text-gallery-mid'
+                          }`}
+                        >
+                          {selectedContact.status}
+                        </span>
+                      )}
+                    </div>
+                    {selectedContact.id && (
+                      <Link
+                        href={`/contacts/${selectedContact.id}`}
+                        className="text-2xs text-gallery-accent hover:text-gallery-black transition-colors flex items-center gap-1"
                       >
-                        {selectedContact.status}
-                      </span>
+                        View profile
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                        </svg>
+                      </Link>
                     )}
                   </div>
                 </div>
