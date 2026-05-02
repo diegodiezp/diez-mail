@@ -15,6 +15,31 @@ function getGmailClient() {
   return google.gmail({ version: 'v1', auth: oauth2 });
 }
 
+export async function PATCH(request, { params }) {
+  try {
+    const { id } = params;
+    const { action } = await request.json();
+    const gmail = getGmailClient();
+
+    let requestBody = {};
+    if (action === 'archive') {
+      requestBody = { removeLabelIds: ['INBOX'] };
+    } else if (action === 'markRead') {
+      requestBody = { removeLabelIds: ['UNREAD'] };
+    } else if (action === 'markUnread') {
+      requestBody = { addLabelIds: ['UNREAD'] };
+    } else {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    }
+
+    await gmail.users.threads.modify({ userId: 'me', id, requestBody });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Modify thread error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
 export async function DELETE(request, { params }) {
   try {
     const { id } = params;
