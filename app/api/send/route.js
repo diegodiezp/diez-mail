@@ -15,6 +15,7 @@ export async function POST(request) {
       pdfLink,
       customBodies,      // Optional: { [personId]: "edited HTML" }
       campaignId: existingCampaignId,  // Optional: send to an existing campaign
+      scheduledFor,      // Optional: ISO date string — schedule instead of send now
     } = body;
 
     if (!subject || !bodyTemplate || !recipients?.length) {
@@ -22,6 +23,21 @@ export async function POST(request) {
         { error: 'Missing required fields: subject, bodyTemplate, recipients' },
         { status: 400 }
       );
+    }
+
+    // ── Scheduled send: save campaign and bail out ────────────────────────────
+    if (scheduledFor) {
+      const campaignFields = {
+        Name: campaignName || subject,
+        Subject: subject,
+        'Body Template': bodyTemplate,
+        Status: 'Scheduled',
+        'Scheduled For': scheduledFor,
+        ...(pdfLink && { 'PDF Link': pdfLink }),
+        People: recipients.filter((r) => r.id).map((r) => r.id),
+      };
+      const campaign = await createCampaign(campaignFields);
+      return NextResponse.json({ campaignId: campaign.id, scheduled: true, scheduledFor });
     }
 
     let campaign;
