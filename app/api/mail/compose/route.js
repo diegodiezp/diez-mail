@@ -16,7 +16,7 @@ function getGmailClient() {
 
 export async function POST(request) {
   try {
-    const { to, subject, htmlBody } = await request.json();
+    const { to, cc, bcc, subject, htmlBody } = await request.json();
 
     if (!to || !subject || !htmlBody) {
       return NextResponse.json({ error: 'to, subject, and htmlBody are required' }, { status: 400 });
@@ -32,6 +32,8 @@ export async function POST(request) {
     const headers = [
       `From: ${senderName ? `${senderName} <${senderEmail}>` : senderEmail}`,
       `To: ${to}`,
+      ...(cc ? [`Cc: ${cc}`] : []),
+      ...(bcc ? [`Bcc: ${bcc}`] : []),
       `Subject: ${subject}`,
       'MIME-Version: 1.0',
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
