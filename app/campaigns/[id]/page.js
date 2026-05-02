@@ -45,6 +45,7 @@ export default function CampaignDetailPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expandedEmail, setExpandedEmail] = useState(null);
+  const [recipientFilter, setRecipientFilter] = useState('all');
 
   useEffect(() => {
     if (!params.id) return;
@@ -126,6 +127,12 @@ export default function CampaignDetailPage() {
           )}
         </div>
         <div className="flex items-center gap-3 flex-shrink-0 mt-1">
+          <a
+            href={`/campaigns/new?followup=${params.id}`}
+            className="btn-secondary text-xs py-1.5 px-4"
+          >
+            Follow-up
+          </a>
           {(campaign?.status === 'Sent' || campaign?.status === 'Partial') && (
             <a
               href={`/campaigns/new?campaign=${params.id}`}
@@ -202,13 +209,40 @@ export default function CampaignDetailPage() {
 
       {/* ── Recipients table ─────────────────────────────────────────────── */}
       <div className="border border-gallery-border bg-gallery-white">
-        <div className="px-5 py-3 border-b border-gallery-border">
+        <div className="px-5 py-3 border-b border-gallery-border flex items-center justify-between gap-4">
           <span className="text-2xs font-medium uppercase tracking-wider text-gallery-mid">
             Recipients ({recipients.length})
           </span>
+          <div className="flex gap-1">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'opened', label: 'Opened' },
+              { key: 'not-opened', label: 'Not opened' },
+              { key: 'clicked', label: 'Clicked' },
+            ].map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setRecipientFilter(f.key)}
+                className={`text-2xs px-2.5 py-1 transition-colors ${
+                  recipientFilter === f.key
+                    ? 'bg-gallery-black text-white'
+                    : 'border border-gallery-border text-gallery-mid hover:text-gallery-black'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {recipients.map((r) => (
+        {recipients
+          .filter((r) => {
+            if (recipientFilter === 'opened') return r.opens > 0;
+            if (recipientFilter === 'not-opened') return r.opens === 0;
+            if (recipientFilter === 'clicked') return r.clicks > 0;
+            return true;
+          })
+          .map((r) => (
           <div key={r.email} className="border-b border-gallery-border last:border-0">
             <div
               className="flex items-center gap-4 px-5 py-3 cursor-pointer hover:bg-gallery-bg transition-colors"
@@ -271,13 +305,18 @@ export default function CampaignDetailPage() {
                                 : '#d44',
                         }}
                       />
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="text-sm">
                           <span className="font-medium">{event['Event Type']}</span>
                           {event.Device && (
                             <span className="text-gallery-mid ml-2">on {event.Device}</span>
                           )}
                         </div>
+                        {event['Clicked URL'] && (
+                          <div className="text-2xs text-gallery-accent mt-0.5 truncate" title={event['Clicked URL']}>
+                            {event['Clicked URL']}
+                          </div>
+                        )}
                         <div className="text-2xs text-gallery-light">
                           {formatDate(event.Timestamp)}
                         </div>
@@ -293,3 +332,4 @@ export default function CampaignDetailPage() {
     </div>
   );
 }
+
