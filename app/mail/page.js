@@ -377,12 +377,12 @@ export default function MailPage() {
 
   return (
     <div
-      className="flex"
+      className="flex flex-col sm:flex-row"
       style={{ height: 'calc(100vh - 64px)', overflow: 'hidden', margin: '-24px -24px 0' }}
     >
       {/* ── LEFT: Thread list ──────────────────────────────────────────── */}
       <div
-        className="flex flex-col border-r border-gallery-border bg-gallery-white flex-shrink-0"
+        className="hidden sm:flex flex-col border-r border-gallery-border bg-gallery-white flex-shrink-0"
         style={{ width: 360 }}
       >
         {/* Compose + search + tabs */}
