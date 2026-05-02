@@ -59,6 +59,67 @@ function ContactBadge({ contact }) {
   );
 }
 
+function FormatToolbar({ editorRef }) {
+  const exec = (cmd, value = null) => {
+    editorRef.current?.focus();
+    document.execCommand(cmd, false, value);
+  };
+
+  const insertLink = () => {
+    const url = window.prompt('URL:');
+    if (url) exec('createLink', url.startsWith('http') ? url : `https://${url}`);
+  };
+
+  const btn = 'p-1.5 rounded hover:bg-gallery-border transition-colors text-gallery-dark disabled:opacity-30';
+
+  return (
+    <div className="flex items-center gap-0.5 px-3 py-1.5 border-b border-gallery-border bg-gallery-bg flex-wrap">
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('bold'); }} className={btn} title="Bold (Ctrl+B)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg>
+      </button>
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('italic'); }} className={btn} title="Italic (Ctrl+I)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>
+      </button>
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('underline'); }} className={btn} title="Underline (Ctrl+U)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
+      </button>
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('strikeThrough'); }} className={btn} title="Strikethrough">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><path d="M16 6C16 6 14.5 4 12 4s-5 1.5-5 4c0 5 9 4 9 8s-2.5 4-5 4-5-2-5-2"/></svg>
+      </button>
+
+      <div className="w-px h-4 bg-gallery-border mx-1" />
+
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('insertUnorderedList'); }} className={btn} title="Bullet list">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('insertOrderedList'); }} className={btn} title="Numbered list">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+      </button>
+
+      <div className="w-px h-4 bg-gallery-border mx-1" />
+
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); insertLink(); }} className={btn} title="Insert link">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      </button>
+
+      <div className="w-px h-4 bg-gallery-border mx-1" />
+
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('justifyLeft'); }} className={btn} title="Align left">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+      </button>
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('justifyCenter'); }} className={btn} title="Align center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+      </button>
+
+      <div className="w-px h-4 bg-gallery-border mx-1" />
+
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('removeFormat'); }} className={btn} title="Clear formatting">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+      </button>
+    </div>
+  );
+}
+
 export default function MailPage() {
   // Thread list
   const [threads, setThreads] = useState([]);
@@ -83,6 +144,10 @@ export default function MailPage() {
   // Compose (new / forward)
   const [composeMode, setComposeMode] = useState(null); // null | 'new' | 'forward'
   const [composeTo, setComposeTo] = useState('');
+  const [composeCc, setComposeCc] = useState('');
+  const [composeBcc, setComposeBcc] = useState('');
+  const [showCc, setShowCc] = useState(false);
+  const [showBcc, setShowBcc] = useState(false);
   const [composeSubject, setComposeSubject] = useState('');
   const [composeIncludeSig, setComposeIncludeSig] = useState(true);
   const [sendingCompose, setSendingCompose] = useState(false);
@@ -238,6 +303,10 @@ export default function MailPage() {
     setComposeMode(mode);
     setSelectedThreadId(null);
     setComposeResult(null);
+    setComposeCc('');
+    setComposeBcc('');
+    setShowCc(false);
+    setShowBcc(false);
     if (mode === 'forward' && forwardMsg) {
       setComposeTo('');
       setComposeSubject(`Fwd: ${forwardMsg.subject || ''}`);
@@ -279,7 +348,13 @@ export default function MailPage() {
       const res = await fetch('/api/mail/compose', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: composeTo, subject: composeSubject, htmlBody: fullBody }),
+        body: JSON.stringify({
+          to: composeTo,
+          cc: composeCc || undefined,
+          bcc: composeBcc || undefined,
+          subject: composeSubject,
+          htmlBody: fullBody,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -437,24 +512,67 @@ export default function MailPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto flex flex-col">
-              <div className="border-b border-gallery-border px-6 py-3">
+              {/* To */}
+              <div className="border-b border-gallery-border px-6 py-2.5 flex items-center gap-2">
+                <span className="text-xs text-gallery-light w-8 flex-shrink-0">To</span>
                 <input
                   type="text"
-                  placeholder="To"
                   value={composeTo}
                   onChange={(e) => setComposeTo(e.target.value)}
-                  className="w-full text-sm outline-none text-gallery-black placeholder:text-gallery-light bg-transparent"
+                  className="flex-1 text-sm outline-none text-gallery-black bg-transparent"
+                  placeholder="Recipients"
                 />
+                <div className="flex gap-2 flex-shrink-0">
+                  {!showCc && (
+                    <button onClick={() => setShowCc(true)} className="text-2xs text-gallery-mid hover:text-gallery-black">Cc</button>
+                  )}
+                  {!showBcc && (
+                    <button onClick={() => setShowBcc(true)} className="text-2xs text-gallery-mid hover:text-gallery-black">Bcc</button>
+                  )}
+                </div>
               </div>
-              <div className="border-b border-gallery-border px-6 py-3">
+              {/* Cc */}
+              {showCc && (
+                <div className="border-b border-gallery-border px-6 py-2.5 flex items-center gap-2">
+                  <span className="text-xs text-gallery-light w-8 flex-shrink-0">Cc</span>
+                  <input
+                    type="text"
+                    value={composeCc}
+                    onChange={(e) => setComposeCc(e.target.value)}
+                    className="flex-1 text-sm outline-none text-gallery-black bg-transparent"
+                    placeholder="Cc recipients"
+                    autoFocus
+                  />
+                </div>
+              )}
+              {/* Bcc */}
+              {showBcc && (
+                <div className="border-b border-gallery-border px-6 py-2.5 flex items-center gap-2">
+                  <span className="text-xs text-gallery-light w-8 flex-shrink-0">Bcc</span>
+                  <input
+                    type="text"
+                    value={composeBcc}
+                    onChange={(e) => setComposeBcc(e.target.value)}
+                    className="flex-1 text-sm outline-none text-gallery-black bg-transparent"
+                    placeholder="Bcc recipients"
+                    autoFocus
+                  />
+                </div>
+              )}
+              {/* Subject */}
+              <div className="border-b border-gallery-border px-6 py-2.5 flex items-center gap-2">
+                <span className="text-xs text-gallery-light w-8 flex-shrink-0">Sub</span>
                 <input
                   type="text"
-                  placeholder="Subject"
                   value={composeSubject}
                   onChange={(e) => setComposeSubject(e.target.value)}
-                  className="w-full text-sm outline-none text-gallery-black placeholder:text-gallery-light bg-transparent"
+                  className="flex-1 text-sm outline-none text-gallery-black bg-transparent font-medium"
+                  placeholder="Subject"
                 />
               </div>
+              {/* Toolbar */}
+              <FormatToolbar editorRef={composeEditorRef} />
+              {/* Body */}
               <div className="flex-1 px-6 py-4">
                 <div
                   ref={composeEditorRef}
@@ -690,6 +808,7 @@ export default function MailPage() {
               ) : (
                 <div className="px-6 py-4">
                   <div className="border border-gallery-border mb-3">
+                    <FormatToolbar editorRef={replyEditorRef} />
                     <div
                       ref={replyEditorRef}
                       contentEditable
