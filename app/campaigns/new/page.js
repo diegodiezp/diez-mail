@@ -80,8 +80,10 @@ function NewCampaignContent() {
   const editorRef = useRef(null);
   const searchParams = useSearchParams();
 
-  // If we're adding recipients to an existing campaign
+  // URL params
   const existingCampaignId = searchParams.get('campaign') || null;
+  const followupId         = searchParams.get('followup') || null;
+  const templateId         = searchParams.get('template') || null;
 
   // Form state
   const [campaignName, setCampaignName] = useState('');
@@ -89,6 +91,17 @@ function NewCampaignContent() {
   const [pdfLink, setPdfLink]           = useState('');
   const [includeSig, setIncludeSig]     = useState(true);
   const [body, setBody]                 = useState('');
+
+  // Scheduling
+  const [scheduledFor, setScheduledFor] = useState('');
+  const [showSchedule, setShowSchedule] = useState(false);
+
+  // Template picker
+  const [templates, setTemplates]           = useState([]);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+
+  // Follow-up campaign info
+  const [followupCampaign, setFollowupCampaign] = useState(null);
 
   // Type filters (loaded from Airtable on mount)
   const [typeFilters, setTypeFilters] = useState([ALL_FILTER]);
@@ -115,6 +128,14 @@ function NewCampaignContent() {
   const [sendResult, setSendResult] = useState(null);
   const [sendProgress, setSendProgress] = useState('');
 
+  // Load templates list
+  useEffect(() => {
+    fetch('/api/templates')
+      .then((r) => r.json())
+      .then((d) => setTemplates(d.templates || []))
+      .catch(() => {});
+  }, []);
+
   // Load existing campaign data if resuming
   useEffect(() => {
     if (!existingCampaignId) return;
@@ -129,7 +150,6 @@ function NewCampaignContent() {
             setBody(data.campaign['Body Template']);
           }
         }
-        // Collect emails already sent so we can flag them
         if (data.events) {
           const sent = new Set();
           data.events.forEach((ev) => {
@@ -142,6 +162,52 @@ function NewCampaignContent() {
       })
       .catch(() => {});
   }, [existingCampaignId]);
+
+  // Load follow-up campaign info
+  useEffect(() => {
+    if (!followupId) return;
+    fetch(`/api/campaigns?id=${followupId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.campaign) {
+          setFollowupCampaign(data.campaign);
+          const origSubject = data.campaign.subject || '';
+          setSubject(origSubject ? `Follow-up: ${origSubject}` : 'Follow-up');
+          setCampaignName(`Follow-up: ${data.campaign.name || origSubject}`);
+        }
+      })
+      .catch(() => {});
+  }, [followupId]);
+
+  // Load template
+  useEffect(() => {
+    if (!templateId) return;
+    fetch(`/api/templates/${templateId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.template) {
+          const t = data.template;
+          if (t.Subject) setSubject(t.Subject);
+          if (t.Name) setCampaignName(t.Name);
+          if (t.Body && editorRef.current) {
+            editorRef.current.innerHTML = t.Body;
+            setBody(t.Body);
+          } else if (t.Body) {
+            setBody(t.Body);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [templateId]);
+
+  const applyTemplate = (t) => {
+    if (t.Subject) setSubject(t.Subject);
+    if (t.Body && editorRef.current) {
+      editorRef.current.innerHTML = t.Body;
+      setBody(t.Body);
+    }
+    setShowTemplatePicker(false);
+  };
 
   // Fetch contact-type options from Airtable schema
   useEffect(() => {
@@ -261,18 +327,33 @@ function NewCampaignContent() {
     }
   }, [editingPersonId, step]);
 
+  // Save as template
+  const handleSaveTemplate = async () => {
+    const name = prompt('Template name:');
+    if (!name) return;
+    const currentBody = editorRef.current ? editorRef.current.innerHTML : body;
+    await fetch('/api/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, subject, body: currentBody }),
+    });
+    alert('Template saved!');
+  };
+
   // Sending
   const handleSend = async () => {
-    // Save any in-progress edits from the personalize editor
     saveCurrentPersonBody();
 
     setStep('sending');
-    setSendProgress(`Sending to ${recipientList.length} recipient${recipientList.length > 1 ? 's' : ''}...`);
+    setSendProgress(
+      scheduledFor
+        ? `Scheduling for ${new Date(scheduledFor).toLocaleString()}...`
+        : `Sending to ${recipientList.length} recipient${recipientList.length > 1 ? 's' : ''}...`
+    );
 
     const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
     const fullBody = body + sigBlock;
 
-    // Build the final customBodies snapshot (grab latest from state)
     const finalCustomBodies = { ...customBodies };
     if (personalizeEditorRef.current && editingPersonId) {
       finalCustomBodies[editingPersonId] = personalizeEditorRef.current.innerHTML;
@@ -286,9 +367,9 @@ function NewCampaignContent() {
         recipients: recipientList,
         pdfLink: pdfLink || undefined,
         customBodies: finalCustomBodies,
+        ...(scheduledFor && { scheduledFor }),
       };
 
-      // If resuming an existing campaign, pass its ID
       if (existingCampaignId) {
         payload.campaignId = existingCampaignId;
       }
@@ -307,6 +388,8 @@ function NewCampaignContent() {
           failed: data.failed,
           skipped: data.skipped || 0,
           campaignId: data.campaignId,
+          scheduled: data.scheduled || false,
+          scheduledFor: data.scheduledFor || null,
         });
         setStep('done');
       } else {
@@ -324,15 +407,32 @@ function NewCampaignContent() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="border border-gallery-border bg-gallery-white p-14 text-center max-w-sm w-full">
-          <div className="font-serif italic text-3xl text-gallery-success mb-3">Campaign Sent</div>
-          <p className="text-sm text-gallery-mid mb-1">
-            <strong className="text-gallery-black tabular-nums">{sendResult.sent}</strong> emails sent successfully
-          </p>
-          {sendResult.failed > 0 && (
-            <p className="text-sm text-red-600 mb-1">{sendResult.failed} failed</p>
-          )}
-          {sendResult.skipped > 0 && (
-            <p className="text-sm text-gallery-mid mb-1">{sendResult.skipped} skipped (already sent)</p>
+          {sendResult.scheduled ? (
+            <>
+              <div className="font-serif italic text-3xl text-gallery-accent mb-3">Scheduled</div>
+              <p className="text-sm text-gallery-mid mb-1">
+                Campaign scheduled for{' '}
+                <strong className="text-gallery-black">
+                  {new Date(sendResult.scheduledFor).toLocaleString('en-GB', {
+                    day: 'numeric', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })}
+                </strong>
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="font-serif italic text-3xl text-gallery-success mb-3">Campaign Sent</div>
+              <p className="text-sm text-gallery-mid mb-1">
+                <strong className="text-gallery-black tabular-nums">{sendResult.sent}</strong> emails sent successfully
+              </p>
+              {sendResult.failed > 0 && (
+                <p className="text-sm text-red-600 mb-1">{sendResult.failed} failed</p>
+              )}
+              {sendResult.skipped > 0 && (
+                <p className="text-sm text-gallery-mid mb-1">{sendResult.skipped} skipped (already sent)</p>
+              )}
+            </>
           )}
           <p className="text-2xs text-gallery-light mt-1 mb-8">{campaignName || subject}</p>
           <div className="flex gap-3 justify-center">
@@ -394,6 +494,23 @@ function NewCampaignContent() {
                 Adding to existing campaign. Already-sent recipients will be skipped automatically.
               </div>
             )}
+            {scheduledFor && (
+              <div className="border border-gallery-border bg-gallery-bg p-4 text-sm text-gallery-mid">
+                Scheduled for:{' '}
+                <strong className="text-gallery-black">
+                  {new Date(scheduledFor).toLocaleString('en-GB', {
+                    day: 'numeric', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })}
+                </strong>
+                <button
+                  onClick={() => setScheduledFor('')}
+                  className="ml-2 text-gallery-light hover:text-gallery-black"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             {sendResult && !sendResult.success && (
               <div className="border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                 Error: {sendResult.error}
@@ -404,7 +521,11 @@ function NewCampaignContent() {
               disabled={isSending}
               className="btn-primary w-full justify-center py-3 text-base disabled:opacity-40"
             >
-              {isSending ? sendProgress : `Send to ${recipientList.length} recipient${recipientList.length !== 1 ? 's' : ''}`}
+              {isSending
+                ? sendProgress
+                : scheduledFor
+                  ? `Schedule for ${new Date(scheduledFor).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                  : `Send to ${recipientList.length} recipient${recipientList.length !== 1 ? 's' : ''}`}
             </button>
           </div>
           <div>
@@ -469,12 +590,12 @@ function NewCampaignContent() {
         </div>
 
         <div
-          className="flex gap-0 border border-gallery-border bg-gallery-white"
+          className="flex flex-col sm:flex-row gap-0 border border-gallery-border bg-gallery-white"
           style={{ height: 'calc(100vh - 200px)' }}
         >
           {/* Left: recipient list */}
           <div
-            className="flex flex-col border-r border-gallery-border flex-shrink-0 overflow-y-auto"
+            className="hidden sm:flex flex-col border-r border-gallery-border flex-shrink-0 overflow-y-auto"
             style={{ width: 240 }}
           >
             {recipientList.map((p) => {
@@ -547,12 +668,12 @@ function NewCampaignContent() {
   // ── Compose — Arternal-style ──────────────────────────────────────────────
   return (
     <div
-      className="flex"
+      className="flex flex-col sm:flex-row"
       style={{ height: 'calc(100vh - 64px)', overflow: 'hidden', margin: '-24px -24px 0' }}
     >
       {/* ── LEFT: Contacts panel ──────────────────────────────────────────── */}
       <div
-        className="flex flex-col border-r border-gallery-border bg-gallery-white flex-shrink-0"
+        className="hidden sm:flex flex-col border-r border-gallery-border bg-gallery-white flex-shrink-0"
         style={{ width: 240 }}
       >
         {/* Header */}
@@ -665,9 +786,19 @@ function NewCampaignContent() {
             className="flex-1 text-xs bg-transparent border-none outline-none text-gallery-black placeholder:text-gallery-light"
             disabled={!!existingCampaignId}
           />
+          {followupCampaign && (
+            <span className="text-2xs text-purple-700 bg-purple-50 px-2 py-0.5 flex-shrink-0">
+              Follow-up to: {followupCampaign.name}
+            </span>
+          )}
           {existingCampaignId && (
             <span className="text-2xs text-blue-600 bg-blue-50 px-2 py-0.5 flex-shrink-0">
               Adding recipients
+            </span>
+          )}
+          {scheduledFor && (
+            <span className="text-2xs text-gallery-accent bg-gallery-accent-light px-2 py-0.5 flex-shrink-0">
+              Scheduled
             </span>
           )}
           {pdfLink && (
@@ -675,7 +806,7 @@ function NewCampaignContent() {
               onClick={() => setPdfLink('')}
               className="text-2xs text-gallery-accent bg-gallery-accent-light px-2 py-0.5 flex-shrink-0"
             >
-              PDF attached x
+              PDF attached ×
             </button>
           )}
         </div>
@@ -769,6 +900,100 @@ function NewCampaignContent() {
           >
             + Attach PDF
           </button>
+
+          <div className="w-px h-5 bg-gallery-border mx-1" />
+
+          {/* Template picker */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); setShowTemplatePicker((v) => !v); }}
+              className="h-7 px-2 text-2xs border border-gallery-border bg-gallery-bg text-gallery-mid hover:text-gallery-black transition-colors"
+            >
+              Templates
+            </button>
+            {showTemplatePicker && (
+              <div className="absolute top-8 left-0 z-50 bg-gallery-white border border-gallery-border shadow-lg min-w-[220px] max-h-60 overflow-y-auto">
+                {templates.length === 0 ? (
+                  <div className="px-4 py-3 text-2xs text-gallery-light">No templates saved yet</div>
+                ) : (
+                  templates.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => applyTemplate(t)}
+                      className="w-full text-left px-4 py-2.5 text-xs hover:bg-gallery-bg border-b border-gallery-border last:border-0"
+                    >
+                      <div className="font-medium truncate">{t.Name}</div>
+                      {t.Subject && <div className="text-gallery-light truncate">{t.Subject}</div>}
+                    </button>
+                  ))
+                )}
+                <div className="border-t border-gallery-border">
+                  <a href="/templates" className="block px-4 py-2 text-2xs text-gallery-accent hover:text-gallery-black">
+                    Manage templates →
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); handleSaveTemplate(); }}
+            className="h-7 px-2 text-2xs border border-gallery-border bg-gallery-bg text-gallery-mid hover:text-gallery-black transition-colors"
+          >
+            Save as template
+          </button>
+
+          <div className="w-px h-5 bg-gallery-border mx-1" />
+
+          {/* Schedule */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); setShowSchedule((v) => !v); }}
+              className={`h-7 px-2 text-2xs border transition-colors ${
+                scheduledFor
+                  ? 'border-gallery-accent bg-gallery-accent-light text-gallery-accent'
+                  : 'border-gallery-border bg-gallery-bg text-gallery-mid hover:text-gallery-black'
+              }`}
+            >
+              {scheduledFor ? '🗓 Scheduled' : 'Schedule'}
+            </button>
+            {showSchedule && (
+              <div className="absolute top-8 right-0 z-50 bg-gallery-white border border-gallery-border shadow-lg p-4 min-w-[240px]">
+                <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-2">
+                  Send later
+                </div>
+                <input
+                  type="datetime-local"
+                  value={scheduledFor}
+                  onChange={(e) => setScheduledFor(e.target.value)}
+                  className="input-field text-xs w-full mb-2"
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSchedule(false)}
+                    className="btn-primary text-2xs py-1 px-3 flex-1 justify-center"
+                  >
+                    Set
+                  </button>
+                  {scheduledFor && (
+                    <button
+                      type="button"
+                      onClick={() => { setScheduledFor(''); setShowSchedule(false); }}
+                      className="btn-secondary text-2xs py-1 px-3"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Body — contentEditable rich text */}
