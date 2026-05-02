@@ -129,7 +129,7 @@ export default function MailPage() {
     setShowReply(false);
     setReplyResult(null);
 
-    fetch(`/api/mail/threads/${selectedThreadId}`)
+    fetch(`/api/mail/${selectedThreadId}`)
       .then((r) => r.json())
       .then((data) => {
         setThreadMessages(data.messages || []);
@@ -182,7 +182,7 @@ export default function MailPage() {
         setShowReply(false);
         // Reload thread to see the sent reply
         setTimeout(() => {
-          fetch(`/api/mail/threads/${selectedThreadId}`)
+          fetch(`/api/mail/${selectedThreadId}`)
             .then((r) => r.json())
             .then((d) => setThreadMessages(d.messages || []));
         }, 1000);
