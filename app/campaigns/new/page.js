@@ -595,8 +595,8 @@ function NewCampaignContent() {
         >
           {/* Left: recipient list */}
           <div
-            className="hidden sm:flex flex-col border-r border-gallery-border flex-shrink-0 overflow-y-auto"
-            style={{ width: 240 }}
+            className="w-full sm:w-[240px] flex flex-col border-b sm:border-b-0 sm:border-r border-gallery-border flex-shrink-0 overflow-y-auto"
+            style={{ minHeight: '150px', maxHeight: 'sm:auto' }}
           >
             {recipientList.map((p) => {
               const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
@@ -673,8 +673,8 @@ function NewCampaignContent() {
     >
       {/* ── LEFT: Contacts panel ──────────────────────────────────────────── */}
       <div
-        className="hidden sm:flex flex-col border-r border-gallery-border bg-gallery-white flex-shrink-0"
-        style={{ width: 240 }}
+        className="w-full sm:w-[240px] flex flex-col border-r border-gallery-border bg-gallery-white sm:flex-shrink-0"
+        style={{ minHeight: '200px', maxHeight: 'sm:auto' }}
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-gallery-border">
