@@ -595,7 +595,7 @@ function NewCampaignContent() {
         >
           {/* Left: recipient list */}
           <div
-            className="w-full sm:w-[240px] flex flex-col flex-1 sm:flex-1 border-b sm:border-b-0 sm:border-r border-gallery-border overflow-y-auto"
+            className="w-full sm:w-[240px] flex flex-col flex-1 sm:flex-shrink-0 border-b sm:border-b-0 sm:border-r border-gallery-border overflow-y-auto"
           >
             {recipientList.map((p) => {
               const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
@@ -672,7 +672,7 @@ function NewCampaignContent() {
     >
       {/* ── LEFT: Contacts panel ──────────────────────────────────────────── */}
       <div
-        className="w-full sm:w-[240px] flex flex-col flex-1 sm:flex-1 border-b sm:border-b-0 sm:border-r border-gallery-border bg-gallery-white sm:flex-shrink-0 overflow-y-auto"
+        className="w-full sm:w-[240px] flex flex-col flex-1 sm:flex-shrink-0 border-b sm:border-b-0 sm:border-r border-gallery-border bg-gallery-white overflow-y-auto"
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-gallery-border">
