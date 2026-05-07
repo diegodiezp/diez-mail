@@ -128,6 +128,12 @@ function NewCampaignContent() {
   const [sendResult, setSendResult] = useState(null);
   const [sendProgress, setSendProgress] = useState('');
 
+  // Test email state
+  const [showTestModal, setShowTestModal] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+
   // Load templates list
   useEffect(() => {
     fetch('/api/templates')
@@ -399,6 +405,45 @@ function NewCampaignContent() {
     } catch (err) {
       setSendResult({ success: false, error: err.message });
       setStep('confirm');
+    }
+  };
+
+  // ── Send test email ─────────────────────────────────────────────────────
+  const handleSendTest = async () => {
+    if (!testEmail.trim()) {
+      setTestResult({ success: false, error: 'Please enter an email address' });
+      return;
+    }
+
+    setTestSending(true);
+    setTestResult(null);
+
+    try {
+      const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+      const htmlContent = body + sigBlock;
+
+      const res = await fetch('/api/send-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject,
+          htmlBody: htmlContent,
+          textBody: body.replace(/<[^>]*>/g, ''),
+          testEmail: testEmail.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestResult({ success: true, sentTo: data.sentTo });
+        setTestEmail('');
+      } else {
+        setTestResult({ success: false, error: data.error || 'Failed to send test email' });
+      }
+    } catch (err) {
+      setTestResult({ success: false, error: err.message });
+    } finally {
+      setTestSending(false);
     }
   };
 
@@ -943,6 +988,63 @@ function NewCampaignContent() {
           >
             Save as template
           </button>
+
+          <div className="w-px h-5 bg-gallery-border mx-1" />
+
+          {/* Send Test */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); setShowTestModal((v) => !v); }}
+              className="h-7 px-2 text-2xs border border-gallery-border bg-gallery-bg text-gallery-mid hover:text-gallery-black transition-colors"
+            >
+              Send Test
+            </button>
+            {showTestModal && (
+              <div className="absolute top-8 right-0 z-50 bg-gallery-white border border-gallery-border shadow-lg p-4 min-w-[240px]">
+                <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-2">
+                  Test email
+                </div>
+                <input
+                  type="email"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !testSending) handleSendTest(); }}
+                  placeholder="your@email.com"
+                  className="input-field text-xs w-full mb-2"
+                  disabled={testSending}
+                />
+                {testResult && (
+                  <div className={`text-2xs mb-3 p-2 rounded ${
+                    testResult.success
+                      ? 'bg-green-50 text-green-700 border border-green-200'
+                      : 'bg-red-50 text-red-700 border border-red-200'
+                  }`}>
+                    {testResult.success
+                      ? `✓ Sent to ${testResult.sentTo}`
+                      : `✗ ${testResult.error}`}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSendTest}
+                    disabled={testSending}
+                    className="btn-primary text-2xs py-1 px-3 flex-1 justify-center disabled:opacity-40"
+                  >
+                    {testSending ? 'Sending...' : 'Send'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowTestModal(false); setTestResult(null); }}
+                    className="btn-secondary text-2xs py-1 px-3"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="w-px h-5 bg-gallery-border mx-1" />
 
