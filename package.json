@@ -12,7 +12,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "googleapis": "^140.0.0",
-    "airtable": "^0.12.2"
+    "airtable": "^0.12.2",
+    "resend": "^4.0.0"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.0",
