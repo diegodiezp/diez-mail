@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createCampaign, updateCampaign, getCampaign, logEmailEvent, getAlreadySentEmails } from '@/lib/airtable';
-import { sendCampaign } from '@/lib/gmail';
+import { sendCampaign } from '@/lib/resend';
 
 export const dynamic = 'force-dynamic';
 
