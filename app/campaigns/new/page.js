@@ -114,6 +114,12 @@ function NewCampaignContent() {
   const [typeFilter, setTypeFilter]       = useState('');
   const [loadingPeople, setLoadingPeople] = useState(true);
 
+  // Master map of every person we've loaded across ALL filter tabs.
+  // This is the key to cross-tab selection: `allPeople` only holds the
+  // currently visible tab, but `peopleByEmail` remembers everyone we've
+  // seen, so the final recipient list can be rebuilt from the full set.
+  const [peopleByEmail, setPeopleByEmail] = useState(new Map());
+
   // Already-sent emails (for incremental campaigns)
   const [alreadySentEmails, setAlreadySentEmails] = useState(new Set());
 
@@ -231,7 +237,9 @@ function NewCampaignContent() {
       .catch(() => {});
   }, []);
 
-  // Fetch contacts
+  // Fetch contacts whenever the active type filter changes.
+  // Incoming people replace the visible list (allPeople) but are ALSO merged
+  // into the master peopleByEmail map so selections survive tab switches.
   useEffect(() => {
     setLoadingPeople(true);
     const params = new URLSearchParams();
@@ -239,7 +247,15 @@ function NewCampaignContent() {
     fetch(`/api/contacts?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
-        setAllPeople(data.people || []);
+        const incoming = data.people || [];
+        setAllPeople(incoming);
+        setPeopleByEmail((prev) => {
+          const next = new Map(prev);
+          incoming.forEach((p) => {
+            if (p.email) next.set(p.email, p);
+          });
+          return next;
+        });
         setLoadingPeople(false);
       })
       .catch(() => setLoadingPeople(false));
@@ -267,11 +283,39 @@ function NewCampaignContent() {
     });
   }, []);
 
-  const selectAll  = () => setSelected(new Set(filteredPeople.map((p) => p.email)));
-  const selectNone = () => setSelected(new Set());
+  // Select all / clear now operate ADDITIVELY on the visible (filtered) tab,
+  // preserving anything selected in other tabs. The Set keys on email, so a
+  // person appearing under two filters can never become a duplicate.
+  const selectAll = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      filteredPeople.forEach((p) => next.add(p.email));
+      return next;
+    });
+
+  const selectNone = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      filteredPeople.forEach((p) => next.delete(p.email));
+      return next;
+    });
+
+  // Clear the ENTIRE selection across all tabs (escape hatch).
+  const clearAllTabs = () => setSelected(new Set());
 
   const canSend = subject && selected.size > 0;
-  const recipientList = allPeople.filter((p) => selected.has(p.email));
+
+  // Build the final recipient list from the master map, NOT from the visible
+  // tab. This is what fixes "selected 100 but only 30 went through": every
+  // selected email is resolved against everyone we've loaded, regardless of
+  // which tab is active when you hit send.
+  const recipientList = Array.from(selected)
+    .map((email) => peopleByEmail.get(email))
+    .filter(Boolean);
+
+  // How many selected contacts in the CURRENTLY visible tab (for the
+  // "Select all" affordance and per-tab feedback).
+  const selectedInView = filteredPeople.filter((p) => selected.has(p.email)).length;
 
   // Rich text toolbar
   const fmt = (cmd, val) => {
@@ -751,15 +795,33 @@ function NewCampaignContent() {
           ))}
         </div>
 
-        {/* Select all / none */}
-        <div className="px-4 py-1.5 border-b border-gallery-border flex gap-4">
+        {/* Select all / none / clear-all */}
+        <div className="px-4 py-1.5 border-b border-gallery-border flex items-center gap-4">
           <button onClick={selectAll} className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors">
             Select all
           </button>
           <button onClick={selectNone} className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors">
-            Clear
+            Clear view
           </button>
+          {selected.size > 0 && (
+            <button
+              onClick={clearAllTabs}
+              className="text-2xs text-gallery-light hover:text-gallery-black transition-colors ml-auto"
+              title="Clear selection across every tab"
+            >
+              Clear all ({selected.size})
+            </button>
+          )}
         </div>
+
+        {/* Per-tab selection hint */}
+        {!loadingPeople && filteredPeople.length > 0 && (
+          <div className="px-4 py-1 border-b border-gallery-border">
+            <span className="text-2xs text-gallery-light">
+              {selectedInView} of {filteredPeople.length} in this view selected
+            </span>
+          </div>
+        )}
 
         {/* Contact list */}
         <div className="flex-1 overflow-y-auto">
