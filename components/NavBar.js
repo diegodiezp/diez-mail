@@ -25,6 +25,16 @@ export default function NavBar() {
                 : 'text-gallery-mid hover:text-gallery-black border-b border-transparent'
             }`}
           >
+            Activity
+          </Link>
+          <Link
+            href="/campaigns"
+            className={`text-xs sm:text-sm transition-colors pb-0.5 ${
+              isActive('/campaigns') && !isActive('/campaigns/new')
+                ? 'text-gallery-black font-medium border-b border-gallery-black'
+                : 'text-gallery-mid hover:text-gallery-black border-b border-transparent'
+            }`}
+          >
             Campaigns
           </Link>
           <Link
