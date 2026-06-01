@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { threadId, to, subject, htmlBody, recipientName } = body;
+    const { threadId, to, cc, subject, htmlBody, recipientName } = body;
 
     if (!threadId || !to || !subject || !htmlBody) {
       return NextResponse.json(
@@ -29,6 +29,7 @@ export async function POST(request) {
     const result = await sendTrackedReply({
       threadId,
       to,
+      cc,
       subject,
       htmlBody,
       campaignId: campaign.id,
