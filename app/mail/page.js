@@ -10,6 +10,37 @@ const SIGNATURE_HTML = [
   `<div><a href="https://instagram.com/diez.gallery" style="color:#1a1a1a;text-decoration:underline;">Instagram</a></div>`,
 ].join('');
 
+// Work out the recipients for a reply.
+// - "to" is the original sender (or, if we sent the last message, the first To recipient).
+// - When replyAll is true, "cc" gathers every other person on the thread
+//   (the remaining To recipients plus the original Cc), minus ourselves and
+//   the primary recipient, de-duplicated.
+function computeReplyRecipients(lastMsg, senderEmail, replyAll) {
+  if (!lastMsg) return { toEmail: '', cc: undefined };
+  const parse = (str) =>
+    (str || '')
+      .split(',')
+      .map((part) => {
+        const m = part.match(/<(.+?)>/);
+        return (m ? m[1] : part).trim().toLowerCase();
+      })
+      .filter(Boolean);
+
+  const fromMe = lastMsg.from.email?.toLowerCase() === senderEmail.toLowerCase();
+  const replyToRaw = fromMe ? (lastMsg.to.split(',')[0] || '').trim() : lastMsg.from.email;
+  const m = replyToRaw.match(/<(.+?)>/);
+  const toEmail = m ? m[1] : replyToRaw;
+
+  let cc;
+  if (replyAll) {
+    const exclude = new Set([senderEmail.toLowerCase(), toEmail.toLowerCase()]);
+    const everyone = [...parse(lastMsg.to), ...parse(lastMsg.cc)];
+    const unique = [...new Set(everyone)].filter((e) => e && !exclude.has(e));
+    cc = unique.length ? unique.join(', ') : undefined;
+  }
+  return { toEmail, cc };
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
@@ -139,6 +170,7 @@ export default function MailPage() {
   const [sendingReply, setSendingReply] = useState(false);
   const [replyResult, setReplyResult] = useState(null);
   const [includeSig, setIncludeSig] = useState(true);
+  const [replyAll, setReplyAll] = useState(false);
   const replyEditorRef = useRef(null);
 
   // Compose (new / forward)
@@ -210,12 +242,7 @@ export default function MailPage() {
     if (!html.trim()) return;
     const lastMsg = threadMessages[threadMessages.length - 1];
     if (!lastMsg) return;
-    const replyTo =
-      lastMsg.from.email?.toLowerCase() === senderEmail.toLowerCase()
-        ? lastMsg.to.split(',')[0].trim()
-        : lastMsg.from.email;
-    const emailMatch = replyTo.match(/<(.+?)>/);
-    const toEmail = emailMatch ? emailMatch[1] : replyTo;
+    const { toEmail, cc: ccEmails } = computeReplyRecipients(lastMsg, senderEmail, replyAll);
     const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
     const fullBody = html + sigBlock;
     setSendingReply(true);
@@ -227,6 +254,7 @@ export default function MailPage() {
         body: JSON.stringify({
           threadId: selectedThreadId,
           to: toEmail,
+          cc: ccEmails,
           subject: lastMsg.subject || '(no subject)',
           htmlBody: fullBody,
         }),
@@ -787,6 +815,7 @@ export default function MailPage() {
                 <div className="px-6 py-3 flex items-center gap-3">
                   <button
                     onClick={() => {
+                      setReplyAll(false);
                       setShowReply(true);
                       setReplyResult(null);
                       setTimeout(() => replyEditorRef.current?.focus(), 100);
@@ -795,6 +824,27 @@ export default function MailPage() {
                   >
                     Reply (with tracking)
                   </button>
+                  {(() => {
+                    const lastMsg = threadMessages[threadMessages.length - 1];
+                    const count = (str) =>
+                      (str || '').split(',').map((x) => x.trim()).filter(Boolean).length;
+                    const canReplyAll =
+                      lastMsg && (count(lastMsg.cc) > 0 || count(lastMsg.to) > 1);
+                    if (!canReplyAll) return null;
+                    return (
+                      <button
+                        onClick={() => {
+                          setReplyAll(true);
+                          setShowReply(true);
+                          setReplyResult(null);
+                          setTimeout(() => replyEditorRef.current?.focus(), 100);
+                        }}
+                        className="btn-secondary text-xs py-2 px-4"
+                      >
+                        Reply all (with tracking)
+                      </button>
+                    );
+                  })()}
                   <button
                     onClick={() => openCompose('forward', {
                       ...threadMessages[threadMessages.length - 1],
@@ -807,6 +857,19 @@ export default function MailPage() {
                 </div>
               ) : (
                 <div className="px-6 py-4">
+                  {(() => {
+                    const lastMsg = threadMessages[threadMessages.length - 1];
+                    const { toEmail, cc } = computeReplyRecipients(lastMsg, senderEmail, replyAll);
+                    return (
+                      <div className="text-2xs text-gallery-mid mb-2">
+                        <span className="uppercase tracking-wide">
+                          {replyAll ? 'Reply all' : 'Reply'}
+                        </span>
+                        <span className="ml-2">To: {toEmail}</span>
+                        {cc && <span className="ml-2">· Cc: {cc}</span>}
+                      </div>
+                    );
+                  })()}
                   <div className="border border-gallery-border mb-3">
                     <FormatToolbar editorRef={replyEditorRef} />
                     <div
