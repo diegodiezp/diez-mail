@@ -24,6 +24,7 @@ function fullDate(iso) {
   });
 }
 
+// Verb phrase used in the headline (followed by the campaign name)
 function actionLabel(type) {
   switch (type) {
     case 'Open':              return 'opened';
@@ -32,6 +33,18 @@ function actionLabel(type) {
     case 'Artwork View':      return 'viewed an artwork in';
     case 'Inquire Click':     return 'inquired from';
     default:                  return 'engaged with';
+  }
+}
+
+// Standalone noun used in the expanded per-event list (no object follows)
+function eventNoun(type) {
+  switch (type) {
+    case 'Open':              return 'Opened';
+    case 'Click':             return 'Clicked link';
+    case 'Viewing Room Open': return 'Viewing room';
+    case 'Artwork View':      return 'Artwork view';
+    case 'Inquire Click':     return 'Inquiry';
+    default:                  return type;
   }
 }
 
@@ -236,10 +249,13 @@ export default function HomePage() {
                           {card.events.map((ev) => (
                             <div key={ev.id} className="flex items-center gap-3 text-2xs">
                               <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${dotClass(ev.type)}`} />
-                              <span className="text-gallery-dark w-28 flex-shrink-0">{actionLabel(ev.type)}</span>
-                              <span className="text-gallery-light flex-1">{fullDate(ev.timestamp)}</span>
+                              <span className="text-gallery-dark flex-shrink-0 w-24">{eventNoun(ev.type)}</span>
+                              {ev.artwork
+                                ? <span className="text-gallery-mid truncate flex-1">{ev.artwork}</span>
+                                : <span className="flex-1" />}
+                              <span className="text-gallery-light flex-shrink-0">{fullDate(ev.timestamp)}</span>
                               {ev.device && (
-                                <span className="text-gallery-light flex-shrink-0">{ev.device}</span>
+                                <span className="text-gallery-light flex-shrink-0 w-16 text-right">{ev.device}</span>
                               )}
                             </div>
                           ))}
