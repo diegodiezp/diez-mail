@@ -160,6 +160,14 @@ function NewCampaignContent() {
           setPdfLink(data.campaign['PDF Link'] || '');
           if (data.campaign['Body Template']) {
             setBody(data.campaign['Body Template']);
+            // Volcamos el cuerpo en el editor UNA sola vez. A partir de aquí el
+            // editor queda "no controlado" por React y el cursor ya no salta al
+            // principio cada vez que escribes.
+            requestAnimationFrame(() => {
+              if (editorRef.current) {
+                editorRef.current.innerHTML = data.campaign['Body Template'];
+              }
+            });
           }
         }
         if (data.events) {
@@ -1169,7 +1177,6 @@ function NewCampaignContent() {
             onBlur={(e) => setBody(e.currentTarget.innerHTML)}
             className="outline-none text-sm leading-relaxed text-gallery-black min-h-[200px] font-sans"
             style={{ fontFamily: 'DM Sans, sans-serif' }}
-            dangerouslySetInnerHTML={existingCampaignId && body ? { __html: body } : undefined}
           />
         </div>
 
