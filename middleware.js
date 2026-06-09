@@ -1,34 +1,69 @@
 import { NextResponse } from 'next/server';
 
-export function middleware(request) {
+// Middleware runs on the Edge runtime, where Node's crypto module is not
+// available. So we compute the same HMAC using the Web Crypto API instead.
+// IMPORTANT: this must produce the identical hex string as deriveAuthToken()
+// in app/api/auth/route.js, or every login will bounce back to /login.
+let _cachedToken = null;
+
+async function deriveAuthToken() {
+  if (_cachedToken) return _cachedToken;
+
+  const secret = process.env.TRACKING_SECRET || 'default-secret';
+  const password = process.env.APP_PASSWORD || '';
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const sig = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(password)
+  );
+
+  _cachedToken = Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  return _cachedToken;
+}
+
+export async function middleware(request) {
   const { pathname } = request.nextUrl;
 
-  // Allow the login page and login API without auth
+  // Public: login page and login API
   if (pathname === '/login' || pathname === '/api/auth') {
     return NextResponse.next();
   }
 
-  // Allow tracking endpoints (pixels and click redirects) without auth
-  // These are called by email clients, not by users
+  // Public: tracking endpoints (called by email clients, not users)
   if (pathname.startsWith('/api/track')) {
     return NextResponse.next();
   }
 
-  // Allow engagement endpoint without auth
-  // Called by viewing rooms via sendBeacon from a different origin
+  // Public: engagement endpoint (called by viewing rooms via sendBeacon)
   if (pathname.startsWith('/api/ev')) {
     return NextResponse.next();
   }
 
-  // Check for auth cookie
-  const authCookie = request.cookies.get('diez-mail-auth');
+  // Public at this layer: cron route does its own CRON_SECRET Bearer check
+  if (pathname.startsWith('/api/cron')) {
+    return NextResponse.next();
+  }
 
-  if (!authCookie || authCookie.value !== process.env.APP_PASSWORD) {
-    // Redirect to login page for page requests
+  // Everything else requires the auth cookie with the derived token
+  const authCookie = request.cookies.get('diez-mail-auth');
+  const expected = await deriveAuthToken();
+
+  if (!authCookie || authCookie.value !== expected) {
     if (!pathname.startsWith('/api/')) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
-    // Return 401 for API requests
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
