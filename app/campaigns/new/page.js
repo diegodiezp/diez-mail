@@ -6,6 +6,11 @@ import { useSearchParams } from 'next/navigation';
 // "All" is always the first filter; the rest come from Airtable
 const ALL_FILTER = { value: '', label: 'All' };
 
+// Max recipients for a direct send before the Vercel function risks a
+// timeout (300s budget / ~1.7s per email ≈ 175, with safety margin = 150).
+// Above this, the campaign should be scheduled so the cron sends it.
+const DIRECT_SEND_LIMIT = 150;
+
 // Plain text version (used to render the preview in the compose UI)
 const SIGNATURE = `Diego Diez\nDirector of diez\n+31 633261845\n+34 648872907\nInstagram`;
 
@@ -608,6 +613,14 @@ function NewCampaignContent() {
                 </button>
               </div>
             )}
+            {recipientList.length > DIRECT_SEND_LIMIT && !scheduledFor && (
+              <div className="border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">
+                <strong>{recipientList.length} recipients exceeds the direct-send limit
+                of {DIRECT_SEND_LIMIT}.</strong> The send may time out partway through.
+                Go back and use the Schedule option instead; scheduled campaigns are
+                sent by the background process without this limit.
+              </div>
+            )}
             {sendResult && !sendResult.success && (
               <div className="border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                 Error: {sendResult.error}
@@ -872,6 +885,18 @@ function NewCampaignContent() {
 
         {/* Next button */}
         <div className="p-3 border-t border-gallery-border">
+          {selected.size > DIRECT_SEND_LIMIT && !scheduledFor && (
+            <div className="mb-2 px-3 py-2 bg-orange-50 border border-orange-200 text-2xs text-orange-700 leading-relaxed">
+              <strong>{selected.size} recipients.</strong> Direct sends over {DIRECT_SEND_LIMIT} can
+              time out. Use <strong>Schedule</strong> (even for a few minutes from now) so the
+              background sender handles it.
+            </div>
+          )}
+          {selected.size > DIRECT_SEND_LIMIT && scheduledFor && (
+            <div className="mb-2 px-3 py-2 bg-green-50 border border-green-200 text-2xs text-green-700 leading-relaxed">
+              Scheduled send: large list will go out via the background sender.
+            </div>
+          )}
           <button
             onClick={() => canSend && enterPersonalizeStep()}
             disabled={!canSend}
