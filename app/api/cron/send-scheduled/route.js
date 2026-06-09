@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { fetchAll, updateCampaign, getAlreadySentEmails, logEmailEvent, fetchOne } from '@/lib/airtable';
-import { sendCampaign } from '@/lib/gmail';
+import { fetchAll, updateCampaign, getAlreadySentEmails, fetchOne, createRecords } from '@/lib/airtable';
+import { sendCampaign } from '@/lib/resend';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,6 @@ export async function GET(request) {
   try {
     const now = new Date().toISOString();
 
-    // Fetch all Scheduled campaigns whose scheduled time has passed
     const scheduled = await fetchAll('Campaigns', {
       filterByFormula: `AND({Status} = 'Scheduled', {Scheduled For} <= '${now}')`,
     });
@@ -27,15 +26,11 @@ export async function GET(request) {
 
     for (const campaign of scheduled) {
       try {
-        // Mark as sending
         await updateCampaign(campaign.id, { Status: 'Sending' });
 
-        // Rebuild recipients from already-sent events (People linked field may exist)
-        // We reconstruct by fetching all events for this campaign
         const alreadySent = await getAlreadySentEmails(campaign.id);
         const peopleIds = campaign.People || [];
 
-        // Fetch person records to get emails
         const recipients = [];
         for (const personId of peopleIds) {
           try {
@@ -69,8 +64,9 @@ export async function GET(request) {
         const sentCount = results.filter((r) => r.status === 'sent').length;
         const failedCount = results.filter((r) => r.status !== 'sent').length;
 
-        for (const result of results) {
-          await logEmailEvent({
+        // Log all events in batches of 10 instead of one-by-one
+        const eventRecords = results.map((result) => {
+          const eventFields = {
             'Event ID': `sent-${result.trackingId || Date.now()}`,
             'Tracking ID': result.trackingId || '',
             'Recipient Email': result.email,
@@ -79,8 +75,15 @@ export async function GET(request) {
             Timestamp: new Date().toISOString(),
             'Gmail Message ID': result.messageId || '',
             'Error Message': result.error || '',
-          });
-        }
+          };
+          const recipient = recipients.find((r) => r.email === result.email);
+          if (recipient?.id) {
+            eventFields.Person = [recipient.id];
+          }
+          return eventFields;
+        });
+
+        await createRecords('Email Events', eventRecords);
 
         await updateCampaign(campaign.id, {
           Status: failedCount === 0 ? 'Sent' : 'Partial',
