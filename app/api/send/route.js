@@ -3,6 +3,7 @@ import { createCampaign, updateCampaign, getCampaign, getAlreadySentEmails, crea
 import { sendCampaign } from '@/lib/resend';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300; // 5 min: allows campaigns up to ~180 recipients
 
 export async function POST(request) {
   try {
