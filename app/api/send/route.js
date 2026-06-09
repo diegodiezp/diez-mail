@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createCampaign, updateCampaign, getCampaign, logEmailEvent, getAlreadySentEmails } from '@/lib/airtable';
+import { createCampaign, updateCampaign, getCampaign, getAlreadySentEmails, createRecords } from '@/lib/airtable';
 import { sendCampaign } from '@/lib/resend';
 
 export const dynamic = 'force-dynamic';
@@ -52,7 +52,6 @@ export async function POST(request) {
         return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
       }
 
-      // Keep existing counts so we can add to them
       previousSentCount = campaign['Sent Count'] || 0;
       previousFailedCount = campaign['Failed Count'] || 0;
 
@@ -67,7 +66,6 @@ export async function POST(request) {
         );
       }
 
-      // Mark as sending
       await updateCampaign(existingCampaignId, { Status: 'Sending' });
       campaign.id = existingCampaignId;
     } else {
@@ -86,7 +84,7 @@ export async function POST(request) {
       campaign = await createCampaign(campaignFields);
     }
 
-    // 2. Send emails (only to actualRecipients, which excludes already-sent for incremental)
+    // 2. Send emails (only to actualRecipients, which excludes already-sent)
     const results = await sendCampaign({
       campaignId: campaign.id,
       subject,
@@ -97,11 +95,12 @@ export async function POST(request) {
       delayMs: 1500,
     });
 
-    // 3. Log send events for each recipient
+    // 3. Log send events for all recipients in batches of 10
+    //    (previously one Airtable write per recipient, sequential)
     const newSentCount = results.filter((r) => r.status === 'sent').length;
     const newFailedCount = results.filter((r) => r.status === 'failed').length;
 
-    for (const result of results) {
+    const eventRecords = results.map((result) => {
       const eventFields = {
         'Event ID': `sent-${result.trackingId || Date.now()}`,
         'Tracking ID': result.trackingId || '',
@@ -113,14 +112,15 @@ export async function POST(request) {
         'Error Message': result.error || '',
       };
 
-      // Link to Person record if we have their Airtable ID
       const recipient = actualRecipients.find((r) => r.email === result.email);
       if (recipient?.id) {
         eventFields.Person = [recipient.id];
       }
 
-      await logEmailEvent(eventFields);
-    }
+      return eventFields;
+    });
+
+    await createRecords('Email Events', eventRecords);
 
     // 4. Update campaign status and accumulate counts
     const totalSent = previousSentCount + newSentCount;
@@ -133,7 +133,6 @@ export async function POST(request) {
     });
 
     // 5. Link new people to the campaign's People field
-    //    We need to add the new person IDs to the existing linked records
     if (existingCampaignId) {
       const existingPeople = campaign.People || [];
       const newPeopleIds = actualRecipients
