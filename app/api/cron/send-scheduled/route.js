@@ -3,6 +3,7 @@ import { fetchAll, updateCampaign, getAlreadySentEmails, fetchOne, createRecords
 import { sendCampaign } from '@/lib/resend';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300; // 5 min: allows campaigns up to ~180 recipients
 
 export async function GET(request) {
   // Verify Vercel cron secret
