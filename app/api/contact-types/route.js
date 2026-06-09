@@ -5,8 +5,8 @@
 // so when Diego adds, renames or removes options in Airtable, the email
 // composer reflects the change without any code edit.
 
-const AIRTABLE_BASE_ID  = 'appFkqvnXlu2Y1Fe4';
-const AIRTABLE_TABLE_ID = 'tbl3NlUODD2Ztq3sl';
+const AIRTABLE_BASE_ID  = process.env.AIRTABLE_BASE_ID;
+const AIRTABLE_TABLE_ID = process.env.AIRTABLE_PEOPLE_TABLE_ID || 'tbl3NlUODD2Ztq3sl';
 const TYPE_FIELD_NAME   = 'Type';
 
 export async function GET() {
