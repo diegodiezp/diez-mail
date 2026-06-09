@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCampaigns, getCampaign, getEventsForCampaign } from '@/lib/airtable';
+import { getCampaigns, getCampaign, getEventsForCampaign, getPeople } from '@/lib/airtable';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,11 +9,23 @@ export async function GET(request) {
     const campaignId = searchParams.get('id');
 
     if (campaignId) {
-      // Fetch campaign record + events in parallel
-      const [campaign, events] = await Promise.all([
+      // Fetch campaign record + events + people in parallel.
+      // People is needed to resolve real names in the recipients table
+      // (events only store the email).
+      const [campaign, events, people] = await Promise.all([
         getCampaign(campaignId),
         getEventsForCampaign(campaignId),
+        getPeople({ fields: ['First Name', 'Last Name', 'Email'] }),
       ]);
+
+      // email (lowercase) → "First Last"
+      const nameByEmail = {};
+      for (const p of people) {
+        if (p.Email) {
+          nameByEmail[p.Email.toLowerCase()] =
+            [p['First Name'], p['Last Name']].filter(Boolean).join(' ').trim();
+        }
+      }
 
       // Aggregate stats per recipient
       const recipients = {};
@@ -24,7 +36,7 @@ export async function GET(request) {
         if (!recipients[email]) {
           recipients[email] = {
             email,
-            name: event['Recipient Email'] || email,
+            name: nameByEmail[email.toLowerCase()] || email,
             personId: null,
             sent: false,
             opens: 0,
@@ -74,7 +86,6 @@ export async function GET(request) {
       const totalClicks = recipientList.reduce((sum, r) => sum + r.clicks, 0);
 
       return NextResponse.json({
-        // ← NEW: campaign name/subject/status now included
         campaign: {
           id: campaign.id,
           name: campaign.Name || 'Untitled Campaign',
