@@ -16,7 +16,21 @@ const FEED_EVENTS = new Set([
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(parseInt(searchParams.get('limit') || '40', 10), 100);
+
+    // Techo elevado de 100 → 500: un solo día muy activo (50+ artwork views
+    // por coleccionista) ya consumía el presupuesto entero del feed.
+    const limit = Math.min(parseInt(searchParams.get('limit') || '40', 10), 500);
+
+    // ── Incremental fetch ────────────────────────────────────────────────
+    // "after" (ISO string) permite al cliente pedir solo los eventos
+    // posteriores a una fecha. Los días pasados son inmutables, así que el
+    // cliente los cachea en localStorage y solo pide lo nuevo.
+    const after = searchParams.get('after');
+    let afterTs = 0;
+    if (after) {
+      const parsed = new Date(after).getTime();
+      if (!isNaN(parsed)) afterTs = parsed;
+    }
 
     // Pull everything in parallel. getEventsForCampaign(null) already returns
     // all events sorted by Timestamp desc.
@@ -47,6 +61,12 @@ export async function GET(request) {
       if (!FEED_EVENTS.has(type)) continue;
 
       const ts = e.Timestamp ? new Date(e.Timestamp).getTime() : 0;
+
+      // Los eventos vienen ordenados desc: en cuanto cruzamos el corte
+      // "after", todo lo que queda es más antiguo y podemos parar.
+      // NOTA: el contador "today" no se ve afectado porque after siempre
+      // es <= inicio de hoy cuando lo manda el cliente.
+      if (afterTs && ts < afterTs) break;
 
       // Count every qualifying movement that happened today
       if (ts >= startOfDay) today++;
