@@ -2,6 +2,54 @@
 
 import { useState, useEffect } from 'react';
 
+// ── Client-side cache for closed days ────────────────────────────────────
+// Los días ya pasados son inmutables (un evento nuevo siempre tiene
+// timestamp de ahora), así que los guardamos en localStorage y solo
+// pedimos a la API lo ocurrido desde el último día cerrado.
+const CACHE_KEY = 'diez-activity-v1';
+const CACHE_MAX_ITEMS = 1000;
+
+function startOfTodayISO() {
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate()).toISOString();
+}
+
+function readCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.items)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(items, lastClosedDay) {
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({ items: items.slice(0, CACHE_MAX_ITEMS), lastClosedDay })
+    );
+  } catch {
+    // localStorage lleno o bloqueado: el feed sigue funcionando sin caché
+  }
+}
+
+// Merge con deduplicación por id de evento, ordenado desc por timestamp
+function mergeFeeds(fresh, cached) {
+  const seen = new Set();
+  const merged = [];
+  for (const item of [...fresh, ...cached]) {
+    if (!item || !item.id || seen.has(item.id)) continue;
+    seen.add(item.id);
+    merged.push(item);
+  }
+  merged.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+  return merged;
+}
+
 // ── Relative time helper ──────────────────────────────────────────────────
 function timeAgo(iso) {
   if (!iso) return '';
@@ -142,12 +190,41 @@ export default function HomePage() {
   const [expanded, setExpanded] = useState(null);
 
   useEffect(() => {
-    fetch('/api/activity?limit=100')
+    const cached = readCache();
+    const todayStart = startOfTodayISO();
+
+    // Solo confiamos en items cacheados de días ya cerrados
+    const cachedPast = (cached?.items || []).filter(
+      (i) => i.timestamp && i.timestamp < todayStart
+    );
+
+    // Pintamos de inmediato lo que ya tenemos (carga instantánea)
+    if (cachedPast.length) {
+      setFeed(cachedPast);
+      setLoading(false);
+    }
+
+    // Si hay caché, pedimos solo desde el último día cerrado registrado.
+    // Si no la hay (primera visita, caché borrada), pedimos todo.
+    const after = cached?.lastClosedDay || null;
+    const url = after
+      ? `/api/activity?limit=500&after=${encodeURIComponent(after)}`
+      : '/api/activity?limit=500';
+
+    fetch(url)
       .then((r) => r.json())
       .then((data) => {
-        setFeed(data.feed || []);
+        const fresh = data.feed || [];
+        const merged = mergeFeeds(fresh, cachedPast);
+        setFeed(merged);
         setToday(data.today != null ? data.today : null);
         setLoading(false);
+
+        // Persistimos los días cerrados y movemos el corte a hoy
+        writeCache(
+          merged.filter((i) => i.timestamp && i.timestamp < todayStart),
+          todayStart
+        );
       })
       .catch(() => setLoading(false));
   }, []);
