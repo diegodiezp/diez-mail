@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCampaigns, getEventsForCampaign, getPeople } from '@/lib/airtable';
+import { getCampaigns, getRecentEvents, getPeople } from '@/lib/airtable';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,10 +32,11 @@ export async function GET(request) {
       if (!isNaN(parsed)) afterTs = parsed;
     }
 
-    // Pull everything in parallel. getEventsForCampaign(null) already returns
-    // all events sorted by Timestamp desc.
+    // Pull everything in parallel. getRecentEvents(after) pushes the cutoff
+    // down to Airtable so we only fetch events since the client's last closed
+    // day (or the full history on a first visit), sorted by Timestamp desc.
     const [events, campaigns, people] = await Promise.all([
-      getEventsForCampaign(null),
+      getRecentEvents(after),
       getCampaigns(),
       getPeople(),
     ]);
