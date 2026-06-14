@@ -297,3 +297,994 @@ function NewCampaignContent() {
       const next = new Set(prev);
       next.has(email) ? next.delete(email) : next.add(email);
       return next;
+    });
+  }, []);
+
+  // Select all / clear now operate ADDITIVELY on the visible (filtered) tab,
+  // preserving anything selected in other tabs. The Set keys on email, so a
+  // person appearing under two filters can never become a duplicate.
+  const selectAll = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      filteredPeople.forEach((p) => next.add(p.email));
+      return next;
+    });
+
+  const selectNone = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      filteredPeople.forEach((p) => next.delete(p.email));
+      return next;
+    });
+
+  // Clear the ENTIRE selection across all tabs (escape hatch).
+  const clearAllTabs = () => setSelected(new Set());
+
+  const canSend = subject && selected.size > 0;
+
+  // Build the final recipient list from the master map, NOT from the visible
+  // tab. This is what fixes "selected 100 but only 30 went through": every
+  // selected email is resolved against everyone we've loaded, regardless of
+  // which tab is active when you hit send.
+  const recipientList = Array.from(selected)
+    .map((email) => peopleByEmail.get(email))
+    .filter(Boolean);
+
+  // How many selected contacts in the CURRENTLY visible tab (for the
+  // "Select all" affordance and per-tab feedback).
+  const selectedInView = filteredPeople.filter((p) => selected.has(p.email)).length;
+
+  // Rich text toolbar
+  const fmt = (cmd, val) => {
+    document.execCommand(cmd, false, val);
+    if (editorRef.current) {
+      setBody(editorRef.current.innerHTML);
+    }
+    editorRef.current?.focus();
+  };
+
+  const insertMergeTag = (tag) => {
+    editorRef.current?.focus();
+    document.execCommand('insertText', false, tag);
+    if (editorRef.current) {
+      setBody(editorRef.current.innerHTML);
+    }
+  };
+
+  // Initialize customBodies when entering personalize step
+  const enterPersonalizeStep = () => {
+    // Capture editor HTML before unmounting it
+    const currentBody = editorRef.current ? editorRef.current.innerHTML : body;
+    setBody(currentBody);
+
+    const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+    const fullTemplate = currentBody + sigBlock;
+
+    // Pre-populate each recipient's custom body with the resolved template
+    const initial = {};
+    for (const person of recipientList) {
+      initial[person.id] = resolveTemplate(fullTemplate, person);
+    }
+    setCustomBodies(initial);
+    setEditingPersonId(recipientList[0]?.id || null);
+    setStep('personalize');
+  };
+
+  // Save the currently-editing person's body from the contentEditable
+  const saveCurrentPersonBody = () => {
+    if (personalizeEditorRef.current && editingPersonId) {
+      setCustomBodies((prev) => ({
+        ...prev,
+        [editingPersonId]: personalizeEditorRef.current.innerHTML,
+      }));
+    }
+  };
+
+  // Switch to a different person in the personalize step
+  const switchToPerson = (personId) => {
+    saveCurrentPersonBody();
+    setEditingPersonId(personId);
+  };
+
+  // When the personalizeEditorRef mounts or editingPersonId changes,
+  // populate the editor with that person's body
+  useEffect(() => {
+    if (step === 'personalize' && personalizeEditorRef.current && editingPersonId) {
+      personalizeEditorRef.current.innerHTML = customBodies[editingPersonId] || '';
+    }
+  }, [editingPersonId, step]);
+
+  // Save as template
+  const handleSaveTemplate = async () => {
+    const name = prompt('Template name:');
+    if (!name) return;
+    const currentBody = editorRef.current ? editorRef.current.innerHTML : body;
+    await fetch('/api/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, subject, body: currentBody }),
+    });
+    alert('Template saved!');
+  };
+
+  // Sending
+  const handleSend = async () => {
+    saveCurrentPersonBody();
+
+    setStep('sending');
+    setSendProgress(
+      scheduledFor
+        ? `Scheduling for ${new Date(scheduledFor).toLocaleString()}...`
+        : `Sending to ${recipientList.length} recipient${recipientList.length > 1 ? 's' : ''}...`
+    );
+
+    const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+    const fullBody = body + sigBlock;
+
+    const finalCustomBodies = { ...customBodies };
+    if (personalizeEditorRef.current && editingPersonId) {
+      finalCustomBodies[editingPersonId] = personalizeEditorRef.current.innerHTML;
+    }
+
+    try {
+      const payload = {
+        campaignName: campaignName || subject,
+        subject,
+        bodyTemplate: fullBody,
+        recipients: recipientList,
+        pdfLink: pdfLink || undefined,
+        customBodies: finalCustomBodies,
+        cc: cc.trim() || undefined,
+        bcc: bcc.trim() || undefined,
+        ...(scheduledFor && { scheduledFor }),
+      };
+
+      if (existingCampaignId) {
+        payload.campaignId = existingCampaignId;
+      }
+
+      const res = await fetch('/api/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setSendResult({
+          success: true,
+          sent: data.sent,
+          failed: data.failed,
+          skipped: data.skipped || 0,
+          campaignId: data.campaignId,
+          scheduled: data.scheduled || false,
+          scheduledFor: data.scheduledFor || null,
+        });
+        setStep('done');
+      } else {
+        setSendResult({ success: false, error: data.error });
+        setStep('confirm');
+      }
+    } catch (err) {
+      setSendResult({ success: false, error: err.message });
+      setStep('confirm');
+    }
+  };
+
+  // ── Send test email ─────────────────────────────────────────────────────
+  const handleSendTest = async () => {
+    if (!testEmail.trim()) {
+      setTestResult({ success: false, error: 'Please enter an email address' });
+      return;
+    }
+
+    setTestSending(true);
+    setTestResult(null);
+
+    try {
+      const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+      const htmlContent = body + sigBlock;
+
+      const res = await fetch('/api/send-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject,
+          htmlBody: htmlContent,
+          textBody: body.replace(/<[^>]*>/g, ''),
+          testEmail: testEmail.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestResult({ success: true, sentTo: data.sentTo });
+        setTestEmail('');
+      } else {
+        setTestResult({ success: false, error: data.error || 'Failed to send test email' });
+      }
+    } catch (err) {
+      setTestResult({ success: false, error: err.message });
+    } finally {
+      setTestSending(false);
+    }
+  };
+
+  // ── Done ─────────────────────────────────────────────────────────────────
+  if (step === 'done' && sendResult?.success) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="border border-gallery-border bg-gallery-white p-14 text-center max-w-sm w-full">
+          {sendResult.scheduled ? (
+            <>
+              <div className="font-serif italic text-3xl text-gallery-accent mb-3">Scheduled</div>
+              <p className="text-sm text-gallery-mid mb-1">
+                Campaign scheduled for{' '}
+                <strong className="text-gallery-black">
+                  {new Date(sendResult.scheduledFor).toLocaleString('en-GB', {
+                    day: 'numeric', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })}
+                </strong>
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="font-serif italic text-3xl text-gallery-success mb-3">Campaign Sent</div>
+              <p className="text-sm text-gallery-mid mb-1">
+                <strong className="text-gallery-black tabular-nums">{sendResult.sent}</strong> emails sent successfully
+              </p>
+              {sendResult.failed > 0 && (
+                <p className="text-sm text-red-600 mb-1">{sendResult.failed} failed</p>
+              )}
+              {sendResult.skipped > 0 && (
+                <p className="text-sm text-gallery-mid mb-1">{sendResult.skipped} skipped (already sent)</p>
+              )}
+            </>
+          )}
+          <p className="text-2xs text-gallery-light mt-1 mb-8">{campaignName || subject}</p>
+          <div className="flex gap-3 justify-center">
+            <a href={`/campaigns/${sendResult.campaignId}`} className="btn-primary">View Campaign</a>
+            <a href="/campaigns/new" className="btn-secondary">New Campaign</a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Confirm ───────────────────────────────────────────────────────────────
+  if (step === 'confirm' || step === 'sending') {
+    const isSending = step === 'sending';
+    const editedCount = Object.keys(customBodies).filter((id) => {
+      // Count how many were actually edited vs the original resolved template
+      const person = recipientList.find((p) => p.id === id);
+      if (!person) return false;
+      const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+      const original = resolveTemplate(body + sigBlock, person);
+      return customBodies[id] !== original;
+    }).length;
+
+    return (
+      <div>
+        <button
+          onClick={() => { if (!isSending) setStep('personalize'); }}
+          className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors mb-4 inline-block"
+        >
+          ← Back to personalize
+        </button>
+        <h1 className="font-serif italic text-3xl mb-8">Confirm &amp; Send</h1>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="space-y-4">
+            <div className="stat-card">
+              <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Campaign</div>
+              <div className="text-base font-medium">{campaignName || <span className="text-gallery-light italic">Untitled</span>}</div>
+            </div>
+            <div className="stat-card">
+              <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Subject</div>
+              <div className="text-base font-medium">{subject}</div>
+            </div>
+            {(cc.trim() || bcc.trim()) && (
+              <div className="stat-card">
+                {cc.trim() && (
+                  <div className="mb-2 last:mb-0">
+                    <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Cc</div>
+                    <div className="text-sm">{cc.trim()}</div>
+                  </div>
+                )}
+                {bcc.trim() && (
+                  <div>
+                    <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Bcc</div>
+                    <div className="text-sm">{bcc.trim()}</div>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="stat-card">
+                <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Recipients</div>
+                <div className="text-2xl font-medium tabular-nums">{recipientList.length}</div>
+              </div>
+              <div className="stat-card">
+                <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Edited</div>
+                <div className="text-2xl font-medium tabular-nums">{editedCount}</div>
+              </div>
+              <div className="stat-card">
+                <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">PDF Link</div>
+                <div className="text-sm font-medium">{pdfLink ? 'Attached' : <span className="text-gallery-light">None</span>}</div>
+              </div>
+            </div>
+            {(cc.trim() || bcc.trim()) && recipientList.length > 1 && (
+              <div className="border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">
+                Cc/Bcc will be added to each of the {recipientList.length} emails in this send.
+              </div>
+            )}
+            {existingCampaignId && (
+              <div className="border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+                Adding to existing campaign. Already-sent recipients will be skipped automatically.
+              </div>
+            )}
+            {scheduledFor && (
+              <div className="border border-gallery-border bg-gallery-bg p-4 text-sm text-gallery-mid">
+                Scheduled for:{' '}
+                <strong className="text-gallery-black">
+                  {new Date(scheduledFor).toLocaleString('en-GB', {
+                    day: 'numeric', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })}
+                </strong>
+                <button
+                  onClick={() => setScheduledFor('')}
+                  className="ml-2 text-gallery-light hover:text-gallery-black"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {recipientList.length > DIRECT_SEND_LIMIT && !scheduledFor && (
+              <div className="border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">
+                <strong>{recipientList.length} recipients exceeds the direct-send limit
+                of {DIRECT_SEND_LIMIT}.</strong> The send may time out partway through.
+                Go back and use the Schedule option instead; scheduled campaigns are
+                sent by the background process without this limit.
+              </div>
+            )}
+            {scheduledFor && (cc.trim() || bcc.trim()) && (
+              <div className="border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">
+                Heads up: Cc/Bcc are not carried into scheduled sends yet. Send now if you
+                need the copies to go out.
+              </div>
+            )}
+            {sendResult && !sendResult.success && (
+              <div className="border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Error: {sendResult.error}
+              </div>
+            )}
+            <button
+              onClick={handleSend}
+              disabled={isSending}
+              className="btn-primary w-full justify-center py-3 text-base disabled:opacity-40"
+            >
+              {isSending
+                ? sendProgress
+                : scheduledFor
+                  ? `Schedule for ${new Date(scheduledFor).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                  : `Send to ${recipientList.length} recipient${recipientList.length !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+          <div>
+            <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-3">
+              Recipients ({recipientList.length})
+            </div>
+            <div className="border border-gallery-border bg-gallery-white max-h-[60vh] overflow-y-auto">
+              {recipientList.map((p) => {
+                const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+                const original = resolveTemplate(body + sigBlock, p);
+                const wasEdited = customBodies[p.id] && customBodies[p.id] !== original;
+                return (
+                  <div key={p.email} className="flex items-center justify-between px-4 py-2.5 border-b border-gallery-border last:border-0">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{p.name} {p.surname}</div>
+                      <div className="text-2xs text-gallery-mid truncate">{p.email}</div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {wasEdited && (
+                        <span className="text-2xs text-gallery-accent font-medium">edited</span>
+                      )}
+                      {p.type && <span className="badge bg-gallery-accent-light text-gallery-accent">{p.type}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Personalize — per-recipient body editing ──────────────────────────────
+  if (step === 'personalize') {
+    const currentPerson = recipientList.find((p) => p.id === editingPersonId);
+
+    return (
+      <div>
+        <button
+          onClick={() => setStep('compose')}
+          className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors mb-4 inline-block"
+        >
+          ← Back to compose
+        </button>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="font-serif italic text-3xl mb-1">Personalize</h1>
+            <p className="text-sm text-gallery-mid">
+              Edit individual messages before sending. Click a name to customize their email.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              saveCurrentPersonBody();
+              setStep('confirm');
+            }}
+            className="btn-primary py-2.5 px-6"
+          >
+            Review &amp; Send ({recipientList.length})
+          </button>
+        </div>
+
+        <div
+          className="flex flex-col sm:flex-row gap-0 border border-gallery-border bg-gallery-white"
+          style={{ height: 'calc(100vh - 200px)' }}
+        >
+          {/* Left: recipient list */}
+          <div
+            className="w-full sm:w-[240px] flex flex-col flex-1 sm:flex-shrink-0 border-b sm:border-b-0 sm:border-r border-gallery-border overflow-y-auto"
+          >
+            {recipientList.map((p) => {
+              const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+              const original = resolveTemplate(body + sigBlock, p);
+              const wasEdited = customBodies[p.id] && customBodies[p.id] !== original;
+              const isActive = p.id === editingPersonId;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => switchToPerson(p.id)}
+                  className={`text-left px-4 py-3 border-b border-gallery-border transition-colors ${
+                    isActive ? 'bg-gallery-accent-light' : 'hover:bg-gallery-bg'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-medium truncate">{p.surname}, {p.name}</div>
+                    {wasEdited && (
+                      <span className="w-2 h-2 rounded-full bg-gallery-accent flex-shrink-0 ml-2" title="Edited" />
+                    )}
+                  </div>
+                  <div className="text-2xs text-gallery-mid truncate">{p.email}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right: editor for selected person */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {currentPerson && (
+              <>
+                <div className="flex items-center justify-between px-6 py-3 border-b border-gallery-border bg-gallery-bg">
+                  <div>
+                    <span className="text-sm font-medium">{currentPerson.name} {currentPerson.surname}</span>
+                    <span className="text-2xs text-gallery-mid ml-3">{currentPerson.email}</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      // Reset this person to the original template
+                      const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
+                      const original = resolveTemplate(body + sigBlock, currentPerson);
+                      setCustomBodies((prev) => ({ ...prev, [currentPerson.id]: original }));
+                      if (personalizeEditorRef.current) {
+                        personalizeEditorRef.current.innerHTML = original;
+                      }
+                    }}
+                    className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors"
+                  >
+                    Reset to template
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto px-6 py-5">
+                  <div
+                    ref={personalizeEditorRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={() => saveCurrentPersonBody()}
+                    className="outline-none text-sm leading-relaxed text-gallery-black min-h-[200px] font-sans"
+                    style={{ fontFamily: 'DM Sans, sans-serif' }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Compose — Arternal-style ──────────────────────────────────────────────
+  return (
+    <div
+      className="flex flex-col sm:flex-row"
+      style={{ height: 'calc(100vh - 64px)', overflow: 'hidden', margin: '-24px -24px 0' }}
+    >
+      {/* ── LEFT: Contacts panel ──────────────────────────────────────────── */}
+      <div
+        className="w-full sm:w-[240px] flex flex-col flex-1 sm:flex-shrink-0 border-b sm:border-b-0 sm:border-r border-gallery-border bg-gallery-white overflow-y-auto"
+      >
+        {/* Header */}
+        <div className="px-4 py-3 border-b border-gallery-border">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-2xs font-medium uppercase tracking-wider text-gallery-mid">Contacts</span>
+            <span className="text-2xs text-gallery-accent font-medium tabular-nums">{selected.size} selected</span>
+          </div>
+          <input
+            type="text"
+            className="input-field text-xs py-1.5"
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        {/* Type filters */}
+        <div className="px-3 py-2 border-b border-gallery-border flex flex-wrap gap-1">
+          {typeFilters.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setTypeFilter(f.value)}
+              className={`text-2xs px-2 py-0.5 transition-colors ${
+                typeFilter === f.value
+                  ? 'bg-gallery-black text-white'
+                  : 'border border-gallery-border text-gallery-mid hover:text-gallery-black'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Select all / none / clear-all */}
+        <div className="px-4 py-1.5 border-b border-gallery-border flex items-center gap-4">
+          <button onClick={selectAll} className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors">
+            Select all
+          </button>
+          <button onClick={selectNone} className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors">
+            Clear view
+          </button>
+          {selected.size > 0 && (
+            <button
+              onClick={clearAllTabs}
+              className="text-2xs text-gallery-light hover:text-gallery-black transition-colors ml-auto"
+              title="Clear selection across every tab"
+            >
+              Clear all ({selected.size})
+            </button>
+          )}
+        </div>
+
+        {/* Per-tab selection hint */}
+        {!loadingPeople && filteredPeople.length > 0 && (
+          <div className="px-4 py-1 border-b border-gallery-border">
+            <span className="text-2xs text-gallery-light">
+              {selectedInView} of {filteredPeople.length} in this view selected
+            </span>
+          </div>
+        )}
+
+        {/* Contact list */}
+        <div className="flex-1 overflow-y-auto">
+          {loadingPeople ? (
+            <div className="p-6 text-center text-2xs text-gallery-light">Loading...</div>
+          ) : filteredPeople.length === 0 ? (
+            <div className="p-6 text-center text-2xs text-gallery-light">No contacts found</div>
+          ) : (
+            filteredPeople.map((person) => {
+              const wasSent = alreadySentEmails.has(person.email);
+              return (
+                <label
+                  key={person.email}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 border-b border-gallery-border cursor-pointer transition-colors ${
+                    selected.has(person.email)
+                      ? 'bg-gallery-accent-light'
+                      : wasSent
+                        ? 'bg-gray-50 opacity-60'
+                        : 'hover:bg-gallery-bg'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(person.email)}
+                    onChange={() => toggleSelect(person.email)}
+                    className="accent-gallery-accent flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium truncate">{person.surname}, {person.name}</div>
+                    <div className="text-2xs text-gallery-mid truncate">{person.email}</div>
+                  </div>
+                  {wasSent && (
+                    <span className="text-2xs text-gallery-light flex-shrink-0">sent</span>
+                  )}
+                </label>
+              );
+            })
+          )}
+        </div>
+
+        {/* Next button */}
+        <div className="p-3 border-t border-gallery-border">
+          {selected.size > DIRECT_SEND_LIMIT && !scheduledFor && (
+            <div className="mb-2 px-3 py-2 bg-orange-50 border border-orange-200 text-2xs text-orange-700 leading-relaxed">
+              <strong>{selected.size} recipients.</strong> Direct sends over {DIRECT_SEND_LIMIT} can
+              time out. Use <strong>Schedule</strong> (even for a few minutes from now) so the
+              background sender handles it.
+            </div>
+          )}
+          {selected.size > DIRECT_SEND_LIMIT && scheduledFor && (
+            <div className="mb-2 px-3 py-2 bg-green-50 border border-green-200 text-2xs text-green-700 leading-relaxed">
+              Scheduled send: large list will go out via the background sender.
+            </div>
+          )}
+          <button
+            onClick={() => canSend && enterPersonalizeStep()}
+            disabled={!canSend}
+            className="btn-primary w-full justify-center py-2.5 text-xs disabled:opacity-40"
+          >
+            {selected.size === 0
+              ? 'Select contacts'
+              : `Personalize (${selected.size})`}
+          </button>
+        </div>
+      </div>
+
+      {/* ── RIGHT: Compose area ───────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-gallery-white">
+
+        {/* Campaign name top bar */}
+        <div className="flex items-center gap-3 px-6 py-2 border-b border-gallery-border">
+          <span className="text-2xs font-medium uppercase tracking-wider text-gallery-mid flex-shrink-0">
+            Campaign:
+          </span>
+          <input
+            value={campaignName}
+            onChange={(e) => setCampaignName(e.target.value)}
+            placeholder="e.g. Opening Week — True as Good"
+            className="flex-1 text-xs bg-transparent border-none outline-none text-gallery-black placeholder:text-gallery-light"
+            disabled={!!existingCampaignId}
+          />
+          {followupCampaign && (
+            <span className="text-2xs text-purple-700 bg-purple-50 px-2 py-0.5 flex-shrink-0">
+              Follow-up to: {followupCampaign.name}
+            </span>
+          )}
+          {existingCampaignId && (
+            <span className="text-2xs text-blue-600 bg-blue-50 px-2 py-0.5 flex-shrink-0">
+              Adding recipients
+            </span>
+          )}
+          {scheduledFor && (
+            <span className="text-2xs text-gallery-accent bg-gallery-accent-light px-2 py-0.5 flex-shrink-0">
+              Scheduled
+            </span>
+          )}
+          {pdfLink && (
+            <button
+              onClick={() => setPdfLink('')}
+              className="text-2xs text-gallery-accent bg-gallery-accent-light px-2 py-0.5 flex-shrink-0"
+            >
+              PDF attached ×
+            </button>
+          )}
+        </div>
+
+        {/* To */}
+        <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gallery-border">
+          <span className="text-sm text-gallery-mid w-6 flex-shrink-0">To</span>
+          <div className={`flex-1 text-sm ${selected.size ? 'text-gallery-black' : 'text-gallery-light italic'}`}>
+            {selected.size === 0
+              ? 'Select contacts from the panel on the left'
+              : selected.size <= 3
+                ? recipientList.map((p) => `${p.name} ${p.surname}`).join(', ')
+                : `${recipientList.slice(0, 2).map((p) => `${p.name} ${p.surname}`).join(', ')} +${selected.size - 2} more`}
+          </div>
+          {selected.size > 0 && (
+            <span className="text-2xs text-gallery-mid flex-shrink-0">{selected.size} recipients</span>
+          )}
+        </div>
+
+        {/* Cc */}
+        <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gallery-border">
+          <span className="text-sm text-gallery-mid w-6 flex-shrink-0">Cc</span>
+          <input
+            value={cc}
+            onChange={(e) => setCc(e.target.value)}
+            placeholder="Add cc... (separate with commas)"
+            className="flex-1 text-sm bg-transparent border-none outline-none text-gallery-black placeholder:text-gallery-light"
+          />
+        </div>
+
+        {/* Bcc */}
+        <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gallery-border">
+          <span className="text-sm text-gallery-mid w-6 flex-shrink-0">Bcc</span>
+          <input
+            value={bcc}
+            onChange={(e) => setBcc(e.target.value)}
+            placeholder="Add bcc... (separate with commas)"
+            className="flex-1 text-sm bg-transparent border-none outline-none text-gallery-black placeholder:text-gallery-light"
+          />
+        </div>
+
+        {/* Cc/Bcc apply to EVERY email in the send: warn when sending to many */}
+        {(cc.trim() || bcc.trim()) && selected.size > 1 && (
+          <div className="px-6 py-2 bg-orange-50 border-b border-orange-200 text-2xs text-orange-700 leading-relaxed">
+            Cc/Bcc apply to all {selected.size} emails in this send. For a single
+            institution, select one contact and put the rest in Cc.
+          </div>
+        )}
+
+        {/* Subject */}
+        <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gallery-border">
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="Subject line..."
+            className="flex-1 text-base font-medium bg-transparent border-none outline-none text-gallery-black placeholder:text-gallery-light"
+          />
+        </div>
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-1 px-6 py-2 border-b border-gallery-border flex-wrap">
+          {[
+            { label: 'B', cmd: 'bold',      cls: 'font-bold' },
+            { label: 'I', cmd: 'italic',    cls: 'italic' },
+            { label: 'U', cmd: 'underline', cls: 'underline' },
+          ].map((b) => (
+            <button
+              key={b.cmd}
+              onMouseDown={(e) => { e.preventDefault(); fmt(b.cmd); }}
+              className={`w-7 h-7 text-xs border border-gallery-border bg-gallery-bg text-gallery-black hover:bg-gallery-border transition-colors ${b.cls}`}
+            >
+              {b.label}
+            </button>
+          ))}
+
+          <div className="w-px h-5 bg-gallery-border mx-1" />
+
+          {[
+            { label: '- List', cmd: 'insertUnorderedList' },
+            { label: '1. List', cmd: 'insertOrderedList' },
+          ].map((b) => (
+            <button
+              key={b.cmd}
+              onMouseDown={(e) => { e.preventDefault(); fmt(b.cmd); }}
+              className="h-7 px-2 text-2xs border border-gallery-border bg-gallery-bg text-gallery-black hover:bg-gallery-border transition-colors"
+            >
+              {b.label}
+            </button>
+          ))}
+
+          <div className="w-px h-5 bg-gallery-border mx-1" />
+
+          {['{{first_name}}', '{{surname}}', '{{full_name}}', '{{pdf_link}}'].map((tag) => (
+            <button
+              key={tag}
+              onMouseDown={(e) => { e.preventDefault(); insertMergeTag(tag); }}
+              className="h-7 px-2 text-2xs border border-gallery-border bg-gallery-accent-light text-gallery-accent hover:opacity-80 transition-opacity"
+            >
+              {tag.replace(/\{\{|\}\}/g, '')}
+            </button>
+          ))}
+
+          <div className="w-px h-5 bg-gallery-border mx-1" />
+
+          <button
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const url = prompt('Google Drive PDF link:');
+              if (url) setPdfLink(url);
+            }}
+            className="h-7 px-2 text-2xs border border-gallery-border bg-gallery-bg text-gallery-mid hover:text-gallery-black transition-colors"
+          >
+            + Attach PDF
+          </button>
+
+          <div className="w-px h-5 bg-gallery-border mx-1" />
+
+          {/* Template picker */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); setShowTemplatePicker((v) => !v); }}
+              className="h-7 px-2 text-2xs border border-gallery-border bg-gallery-bg text-gallery-mid hover:text-gallery-black transition-colors"
+            >
+              Templates
+            </button>
+            {showTemplatePicker && (
+              <div className="absolute top-8 left-0 z-50 bg-gallery-white border border-gallery-border shadow-lg min-w-[220px] max-h-60 overflow-y-auto">
+                {templates.length === 0 ? (
+                  <div className="px-4 py-3 text-2xs text-gallery-light">No templates saved yet</div>
+                ) : (
+                  templates.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => applyTemplate(t)}
+                      className="w-full text-left px-4 py-2.5 text-xs hover:bg-gallery-bg border-b border-gallery-border last:border-0"
+                    >
+                      <div className="font-medium truncate">{t.Name}</div>
+                      {t.Subject && <div className="text-gallery-light truncate">{t.Subject}</div>}
+                    </button>
+                  ))
+                )}
+                <div className="border-t border-gallery-border">
+                  <a href="/templates" className="block px-4 py-2 text-2xs text-gallery-accent hover:text-gallery-black">
+                    Manage templates →
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); handleSaveTemplate(); }}
+            className="h-7 px-2 text-2xs border border-gallery-border bg-gallery-bg text-gallery-mid hover:text-gallery-black transition-colors"
+          >
+            Save as template
+          </button>
+
+          <div className="w-px h-5 bg-gallery-border mx-1" />
+
+          {/* Send Test */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); setShowTestModal((v) => !v); }}
+              className="h-7 px-2 text-2xs border border-gallery-border bg-gallery-bg text-gallery-mid hover:text-gallery-black transition-colors"
+            >
+              Send Test
+            </button>
+            {showTestModal && (
+              <div className="absolute top-8 right-0 z-50 bg-gallery-white border border-gallery-border shadow-lg p-4 min-w-[240px]">
+                <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-2">
+                  Test email
+                </div>
+                <input
+                  type="email"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !testSending) handleSendTest(); }}
+                  placeholder="your@email.com"
+                  className="input-field text-xs w-full mb-2"
+                  disabled={testSending}
+                />
+                {testResult && (
+                  <div className={`text-2xs mb-3 p-2 rounded ${
+                    testResult.success
+                      ? 'bg-green-50 text-green-700 border border-green-200'
+                      : 'bg-red-50 text-red-700 border border-red-200'
+                  }`}>
+                    {testResult.success
+                      ? `✓ Sent to ${testResult.sentTo}`
+                      : `✗ ${testResult.error}`}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSendTest}
+                    disabled={testSending}
+                    className="btn-primary text-2xs py-1 px-3 flex-1 justify-center disabled:opacity-40"
+                  >
+                    {testSending ? 'Sending...' : 'Send'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowTestModal(false); setTestResult(null); }}
+                    className="btn-secondary text-2xs py-1 px-3"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="w-px h-5 bg-gallery-border mx-1" />
+
+          {/* Schedule */}
+          <div className="relative">
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); setShowSchedule((v) => !v); }}
+              className={`h-7 px-2 text-2xs border transition-colors ${
+                scheduledFor
+                  ? 'border-gallery-accent bg-gallery-accent-light text-gallery-accent'
+                  : 'border-gallery-border bg-gallery-bg text-gallery-mid hover:text-gallery-black'
+              }`}
+            >
+              {scheduledFor ? '🗓 Scheduled' : 'Schedule'}
+            </button>
+            {showSchedule && (
+              <div className="absolute top-8 right-0 z-50 bg-gallery-white border border-gallery-border shadow-lg p-4 min-w-[240px]">
+                <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-2">
+                  Send later
+                </div>
+                <input
+                  type="datetime-local"
+                  value={scheduledFor}
+                  onChange={(e) => setScheduledFor(e.target.value)}
+                  className="input-field text-xs w-full mb-2"
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSchedule(false)}
+                    className="btn-primary text-2xs py-1 px-3 flex-1 justify-center"
+                  >
+                    Set
+                  </button>
+                  {scheduledFor && (
+                    <button
+                      type="button"
+                      onClick={() => { setScheduledFor(''); setShowSchedule(false); }}
+                      className="btn-secondary text-2xs py-1 px-3"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Body — contentEditable rich text */}
+        <FormatToolbar editorRef={editorRef} />
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div
+            ref={editorRef}
+            contentEditable
+            suppressContentEditableWarning
+            onInput={(e) => setBody(e.currentTarget.innerHTML)}
+            onBlur={(e) => setBody(e.currentTarget.innerHTML)}
+            className="outline-none text-sm leading-relaxed text-gallery-black min-h-[200px] font-sans"
+            style={{ fontFamily: 'DM Sans, sans-serif' }}
+          />
+        </div>
+
+        {/* Signature */}
+        <div className="px-6 border-t border-gallery-border">
+          <label className="flex items-center gap-2 py-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeSig}
+              onChange={(e) => setIncludeSig(e.target.checked)}
+              className="accent-gallery-accent"
+            />
+            <span className="text-2xs text-gallery-mid">Include signature</span>
+          </label>
+          {includeSig && (
+            <div className="pb-5 text-sm text-gallery-mid leading-relaxed border-t border-gallery-border pt-3">
+              {SIGNATURE.split('\n').map((line, i) => <div key={i}>{line}</div>)}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function NewCampaignPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-20 text-gallery-light text-sm">Loading...</div>}>
+      <NewCampaignContent />
+    </Suspense>
+  );
+}
