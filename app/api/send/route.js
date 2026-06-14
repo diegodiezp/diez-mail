@@ -17,6 +17,8 @@ export async function POST(request) {
       customBodies,      // Optional: { [personId]: "edited HTML" }
       campaignId: existingCampaignId,  // Optional: send to an existing campaign
       scheduledFor,      // Optional: ISO date string — schedule instead of send now
+      cc,                // Optional: texto libre o array, se aplica a cada correo
+      bcc,               // Optional: texto libre o array, se aplica a cada correo
     } = body;
 
     if (!subject || !bodyTemplate || !recipients?.length) {
@@ -93,6 +95,8 @@ export async function POST(request) {
       recipients: actualRecipients,
       pdfLink: pdfLink || null,
       customBodies: customBodies || null,
+      cc: cc || null,
+      bcc: bcc || null,
       delayMs: 1500,
     });
 
