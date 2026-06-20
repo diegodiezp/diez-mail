@@ -247,6 +247,12 @@
       }
     }
 
+    // Public: newsletter form
+if (pathname === '/diez-newsletter.html') {
+  return NextResponse.next();
+}
+
+    
     function showStatus(msg, type) {
       const el = document.getElementById('status');
       el.textContent = msg;
