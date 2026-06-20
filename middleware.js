@@ -55,7 +55,11 @@ export async function middleware(request) {
   if (pathname.startsWith('/api/cron')) {
     return NextResponse.next();
   }
-
+  
+// Public: newsletter signup (called from the public form)
+if (pathname.startsWith('/api/newsletter')) {
+  return NextResponse.next();
+}
   // Everything else requires the auth cookie with the derived token
   const authCookie = request.cookies.get('diez-mail-auth');
   const expected = await deriveAuthToken();
