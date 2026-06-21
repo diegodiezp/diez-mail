@@ -35,29 +35,29 @@ async function deriveAuthToken() {
 
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
-
-  // Public: login page and login API
-  if (pathname === '/login' || pathname === '/api/auth') {
-    return NextResponse.next();
-  }
-
-  // Public: tracking endpoints (called by email clients, not users)
-  if (pathname.startsWith('/api/track')) {
-    return NextResponse.next();
-  }
-
-  // Public: engagement endpoint (called by viewing rooms via sendBeacon)
-  if (pathname.startsWith('/api/ev')) {
-    return NextResponse.next();
-  }
-
-  // Public at this layer: cron route does its own CRON_SECRET Bearer check
-  if (pathname.startsWith('/api/cron')) {
-    return NextResponse.next();
-  }
   
-// Public: newsletter signup (called from the public form)
-if (pathname.startsWith('/api/newsletter')) {
+// Public: login page and login API
+if (pathname === '/login' || pathname === '/api/auth') {
+  return NextResponse.next();
+}
+
+// Public: tracking endpoints
+if (pathname.startsWith('/api/track')) {
+  return NextResponse.next();
+}
+
+// Public: engagement endpoint
+if (pathname.startsWith('/api/ev')) {
+  return NextResponse.next();
+}
+
+// Public: cron route
+if (pathname.startsWith('/api/cron')) {
+  return NextResponse.next();
+}
+
+// Public: newsletter form + API
+if (pathname === '/diez-newsletter.html' || pathname.startsWith('/api/newsletter')) {
   return NextResponse.next();
 }
   // Everything else requires the auth cookie with the derived token
