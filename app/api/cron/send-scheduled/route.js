@@ -14,6 +14,7 @@ function buildEventFields(result, campaignId) {
     'Tracking ID': result.trackingId || '',
     'Recipient Email': result.email,
     Campaign: [campaignId],
+    'Campaign ID': campaignId,
     'Event Type': result.status === 'sent' ? 'Sent' : 'Failed',
     Timestamp: new Date().toISOString(),
     'Gmail Message ID': result.messageId || '',
