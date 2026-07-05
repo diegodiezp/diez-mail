@@ -306,7 +306,7 @@ function NewCampaignContent() {
   const selectAll = () =>
     setSelected((prev) => {
       const next = new Set(prev);
-      filteredPeople.forEach((p) => next.add(p.email));
+      filteredPeople.forEach((p) => { if (!p.doNotEmail) next.add(p.email); });
       return next;
     });
 
@@ -886,30 +886,36 @@ function NewCampaignContent() {
           ) : (
             filteredPeople.map((person) => {
               const wasSent = alreadySentEmails.has(person.email);
+              const suppressed = !!person.doNotEmail;
               return (
                 <label
                   key={person.email}
-                  className={`flex items-center gap-2.5 px-3 py-2.5 border-b border-gallery-border cursor-pointer transition-colors ${
-                    selected.has(person.email)
-                      ? 'bg-gallery-accent-light'
-                      : wasSent
-                        ? 'bg-gray-50 opacity-60'
-                        : 'hover:bg-gallery-bg'
+                  className={`flex items-center gap-2.5 px-3 py-2.5 border-b border-gallery-border transition-colors ${
+                    suppressed
+                      ? 'bg-gray-50 opacity-50 cursor-not-allowed'
+                      : selected.has(person.email)
+                        ? 'bg-gallery-accent-light cursor-pointer'
+                        : wasSent
+                          ? 'bg-gray-50 opacity-60 cursor-pointer'
+                          : 'hover:bg-gallery-bg cursor-pointer'
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={selected.has(person.email)}
-                    onChange={() => toggleSelect(person.email)}
+                    onChange={() => !suppressed && toggleSelect(person.email)}
+                    disabled={suppressed}
                     className="accent-gallery-accent flex-shrink-0"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium truncate">{person.surname}, {person.name}</div>
                     <div className="text-2xs text-gallery-mid truncate">{person.email}</div>
                   </div>
-                  {wasSent && (
+                  {suppressed ? (
+                    <span className="text-2xs text-gallery-light flex-shrink-0">do not email</span>
+                  ) : wasSent ? (
                     <span className="text-2xs text-gallery-light flex-shrink-0">sent</span>
-                  )}
+                  ) : null}
                 </label>
               );
             })
