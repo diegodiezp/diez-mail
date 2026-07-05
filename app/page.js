@@ -183,6 +183,66 @@ function collapse(items) {
   return groups;
 }
 
+function formatDueDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const startToday = new Date();
+  startToday.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((d - startToday) / 86400000);
+  if (diffDays < 0) return `Overdue · ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Tomorrow';
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+function DueThisWeekCard() {
+  const [dueActions, setDueActions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/due-actions')
+      .then((r) => r.json())
+      .then((data) => {
+        setDueActions(data.dueActions || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading || dueActions.length === 0) return null;
+
+  return (
+    <div className="border border-gallery-border bg-gallery-white mb-6">
+      <div className="px-4 sm:px-5 py-3 border-b border-gallery-border flex items-center justify-between">
+        <h2 className="text-xs font-medium uppercase tracking-wider text-gallery-mid">Due this week</h2>
+        <span className="text-2xs text-gallery-light">{dueActions.length}</span>
+      </div>
+      <div>
+        {dueActions.map((item) => {
+          const overdue = item.nextActionDate && new Date(item.nextActionDate) < new Date().setHours(0, 0, 0, 0);
+          return (
+            <a
+              key={item.id}
+              href={`/contacts/${item.id}`}
+              className="flex items-center justify-between gap-3 px-4 sm:px-5 py-2.5 border-b border-gallery-border last:border-0 hover:bg-gallery-bg transition-colors"
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{item.name}</div>
+                {item.nextAction && (
+                  <div className="text-2xs text-gallery-mid truncate">{item.nextAction}</div>
+                )}
+              </div>
+              <span className={`text-2xs flex-shrink-0 ${overdue ? 'text-red-600 font-medium' : 'text-gallery-light'}`}>
+                {formatDueDate(item.nextActionDate)}
+              </span>
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const [feed, setFeed] = useState([]);
   const [today, setToday] = useState(null);
@@ -261,6 +321,8 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      <DueThisWeekCard />
 
       <div className="border border-gallery-border bg-gallery-white">
         {loading ? (
