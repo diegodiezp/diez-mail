@@ -122,6 +122,7 @@ function NewCampaignContent() {
   const [searchQuery, setSearchQuery]     = useState('');
   const [typeFilter, setTypeFilter]       = useState('');
   const [loadingPeople, setLoadingPeople] = useState(true);
+  const [sortByEngagement, setSortByEngagement] = useState(false);
 
   // Master map of every person we've loaded across ALL filter tabs.
   // This is the key to cross-tab selection: `allPeople` only holds the
@@ -291,6 +292,12 @@ function NewCampaignContent() {
       )
     );
   }, [searchQuery, allPeople]);
+
+  // Warmest contacts first when the toggle is on, otherwise keep the order
+  // the list already comes in (alphabetical, from getPeople's sort).
+  const sortedPeople = sortByEngagement
+    ? [...filteredPeople].sort((a, b) => (b.engagementScore || 0) - (a.engagementScore || 0))
+    : filteredPeople;
 
   const toggleSelect = useCallback((email) => {
     setSelected((prev) => {
@@ -857,6 +864,15 @@ function NewCampaignContent() {
           <button onClick={selectNone} className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors">
             Clear view
           </button>
+          <button
+            onClick={() => setSortByEngagement((v) => !v)}
+            className={`text-2xs transition-colors ${
+              sortByEngagement ? 'text-gallery-accent font-medium' : 'text-gallery-mid hover:text-gallery-black'
+            }`}
+            title="Sort this view by engagement score, warmest first"
+          >
+            Sort by engagement
+          </button>
           {selected.size > 0 && (
             <button
               onClick={clearAllTabs}
@@ -884,7 +900,7 @@ function NewCampaignContent() {
           ) : filteredPeople.length === 0 ? (
             <div className="p-6 text-center text-2xs text-gallery-light">No contacts found</div>
           ) : (
-            filteredPeople.map((person) => {
+            sortedPeople.map((person) => {
               const wasSent = alreadySentEmails.has(person.email);
               const suppressed = !!person.doNotEmail;
               return (
