@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createCampaign, updateCampaign, getCampaign, getAlreadySentEmails, createRecords } from '@/lib/airtable';
+import { createCampaign, updateCampaign, getCampaign, getAlreadySentEmails, getSuppressedEmails, createRecords } from '@/lib/airtable';
 import { sendCampaign } from '@/lib/resend';
 
 export const dynamic = 'force-dynamic';
@@ -87,6 +87,20 @@ export async function POST(request) {
       campaign = await createCampaign(campaignFields);
     }
 
+    // Drop anyone marked "Do Not Email". The frontend sends recipient objects
+    // from an earlier fetch, so this has to be re-checked server-side against
+    // current Airtable state rather than trusted from the request body.
+    const suppressedEmails = await getSuppressedEmails(actualRecipients.map((r) => r.id));
+    const suppressedCount = actualRecipients.filter((r) => suppressedEmails.has(r.email)).length;
+    actualRecipients = actualRecipients.filter((r) => !suppressedEmails.has(r.email));
+
+    if (actualRecipients.length === 0) {
+      return NextResponse.json(
+        { error: 'All selected recipients are marked Do Not Email or have already received this campaign' },
+        { status: 400 }
+      );
+    }
+
     // 2. Send emails (only to actualRecipients, which excludes already-sent)
     const results = await sendCampaign({
       campaignId: campaign.id,
@@ -157,6 +171,7 @@ export async function POST(request) {
       totalSent,
       totalFailed,
       skipped: recipients.length - actualRecipients.length,
+      suppressed: suppressedCount,
       results,
     });
   } catch (error) {
