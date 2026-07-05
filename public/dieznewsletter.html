@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Newsletter — Diez Gallery</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--black:#0a0a0a;--white:#fafafa;--gray:#888;--light:#d8d8d8;--error:#c0392b}
+
+    html{height:100%}
+    body{
+      font-family:'Replica','Helvetica Neue',Helvetica,Arial,sans-serif;
+      background:var(--white);
+      color:var(--black);
+      min-height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:3rem 1.5rem;
+    }
+
+    .container{
+      width:100%;
+      max-width:480px;
+    }
+
+    .wordmark{
+      font-size:.65rem;
+      letter-spacing:.16em;
+      text-transform:uppercase;
+      color:var(--gray);
+      margin-bottom:2.8rem;
+    }
+
+    h1{
+      font-size:1.1rem;
+      font-weight:400;
+      line-height:1.45;
+      margin-bottom:.35rem;
+    }
+
+    .sub{
+      font-size:.82rem;
+      color:var(--gray);
+      line-height:1.7;
+      margin-bottom:2.4rem;
+    }
+
+    /* Two-column row — stacks to single column on narrow screens */
+    .field-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:1.5rem;
+      margin-bottom:0; /* spacing handled by .field */
+    }
+
+    .field{
+      margin-bottom:1.5rem;
+    }
+
+    label{
+      display:block;
+      font-size:.6rem;
+      letter-spacing:.13em;
+      text-transform:uppercase;
+      color:var(--gray);
+      margin-bottom:.5rem;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    textarea{
+      width:100%;
+      border:none;
+      border-bottom:1px solid var(--light);
+      background:transparent;
+      font-family:inherit;
+      font-size:.9rem;
+      color:var(--black);
+      padding:.4rem 0 .45rem;
+      outline:none;
+      transition:border-color .2s;
+      -webkit-appearance:none;
+      border-radius:0;
+      resize:none;
+    }
+
+    textarea{
+      height:3.2rem;
+      line-height:1.5;
+    }
+
+    input:focus,
+    textarea:focus{
+      border-bottom-color:var(--black);
+    }
+
+    input::placeholder,
+    textarea::placeholder{
+      color:var(--light);
+    }
+
+    .submit-row{
+      margin-top:2rem;
+      display:flex;
+      align-items:center;
+      gap:1.2rem;
+      flex-wrap:wrap;
+    }
+
+    button{
+      background:var(--black);
+      color:var(--white);
+      border:none;
+      font-family:inherit;
+      font-size:.62rem;
+      letter-spacing:.13em;
+      text-transform:uppercase;
+      padding:.8rem 2rem;
+      cursor:pointer;
+      transition:opacity .2s;
+      white-space:nowrap;
+      flex-shrink:0;
+    }
+
+    button:hover{opacity:.7}
+    button:disabled{opacity:.35;cursor:not-allowed}
+
+    .status{
+      font-size:.78rem;
+      min-height:1.2rem;
+      color:var(--gray);
+    }
+
+    .status.error{color:var(--error)}
+
+    /* Success state */
+    .success-state{display:none}
+    .success-state.visible{display:block}
+    .form-state.hidden{display:none}
+
+    .success-msg{
+      font-size:1.05rem;
+      font-weight:400;
+      margin-bottom:.4rem;
+    }
+
+    .success-sub{
+      font-size:.82rem;
+      color:var(--gray);
+      margin-bottom:2.2rem;
+      line-height:1.6;
+    }
+
+    .back{
+      font-size:.62rem;
+      letter-spacing:.11em;
+      text-transform:uppercase;
+      color:var(--gray);
+      text-decoration:none;
+      transition:color .2s;
+    }
+
+    .back:hover{color:var(--black)}
+
+    /* Honeypot: off-screen, not display:none — some bots skip hidden fields
+       but still autofill anything merely positioned out of view. */
+    .hp-field{
+      position:absolute;
+      left:-9999px;
+      top:-9999px;
+    }
+
+    /* ── Mobile ──────────────────────────────────────────────────────────── */
+    @media(max-width:480px){
+      body{
+        align-items:flex-start;
+        padding:2.5rem 1.25rem 3rem;
+      }
+
+      .field-row{
+        grid-template-columns:1fr;
+        gap:0;
+      }
+
+      h1{font-size:1rem}
+
+      button{
+        width:100%;
+        text-align:center;
+        justify-content:center;
+      }
+
+      .submit-row{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:.8rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="wordmark">Diez Gallery — Amsterdam</div>
+
+    <div class="form-state" id="formState">
+      <h1>Stay in the loop.</h1>
+      <p class="sub">Exhibition openings, new works, and program updates.</p>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="name">Name</label>
+          <input type="text" id="name" placeholder="First name" autocomplete="given-name">
+        </div>
+        <div class="field">
+          <label for="surname">Surname</label>
+          <input type="text" id="surname" placeholder="Last name" autocomplete="family-name">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="email">Email *</label>
+        <input type="email" id="email" placeholder="your@email.com" autocomplete="email">
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="phone">Phone</label>
+          <input type="tel" id="phone" placeholder="+31 6 ..." autocomplete="tel">
+        </div>
+        <div class="field">
+          <label for="city">City</label>
+          <input type="text" id="city" placeholder="Amsterdam" autocomplete="address-level2">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="interest">Interest</label>
+        <textarea id="interest" placeholder="Artists, themes, or anything you'd like us to know"></textarea>
+      </div>
+
+      <div class="field hp-field" aria-hidden="true">
+        <label for="website">Website</label>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+      </div>
+
+      <div class="submit-row">
+        <button id="submitBtn" type="button" onclick="handleSubmit()">Subscribe</button>
+        <div class="status" id="status"></div>
+      </div>
+    </div>
+
+    <div class="success-state" id="successState">
+      <p class="success-msg">You're on the list.</p>
+      <p class="success-sub">We'll be in touch from Amsterdam.</p>
+      <a class="back" href="https://diez.gallery">← Back to the gallery</a>
+    </div>
+  </div>
+
+  <script>
+    function handleSubmit() {
+      var email = document.getElementById('email').value.trim();
+      var btn = document.getElementById('submitBtn');
+      if (!email || email.indexOf('@') === -1) {
+        showStatus('Please enter a valid email address.', 'error');
+        return;
+      }
+      btn.disabled = true;
+      showStatus('', '');
+      var payload = {
+        email: email,
+        name: document.getElementById('name').value.trim(),
+        surname: document.getElementById('surname').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        city: document.getElementById('city').value.trim(),
+        interest: document.getElementById('interest').value.trim(),
+        website: document.getElementById('website').value.trim()
+      };
+      fetch('/api/newsletter', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      }).then(function(res) {
+        if (!res.ok) {
+          showStatus('Something went wrong. Please try again.', 'error');
+          btn.disabled = false;
+          return;
+        }
+        document.getElementById('formState').classList.add('hidden');
+        document.getElementById('successState').classList.add('visible');
+      }).catch(function() {
+        showStatus('Connection error. Please try again.', 'error');
+        btn.disabled = false;
+      });
+    }
+
+    function showStatus(msg, type) {
+      var el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status ' + (type || '');
+    }
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') handleSubmit();
+    });
+  </script>
+</body>
+</html>
