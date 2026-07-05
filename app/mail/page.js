@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 const SIGNATURE_HTML = [
   `<div>Diego Diez</div>`,
@@ -151,7 +152,9 @@ function FormatToolbar({ editorRef }) {
   );
 }
 
-export default function MailPage() {
+function MailPageContent() {
+  const searchParams = useSearchParams();
+
   // Thread list
   const [threads, setThreads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -218,6 +221,17 @@ export default function MailPage() {
     const debounce = setTimeout(() => fetchThreads(), 300);
     return () => clearTimeout(debounce);
   }, [fetchThreads]);
+
+  // Prefill compose from a ?to= query param (used by the follow-up queue's
+  // "Compose" link). Only runs once on mount.
+  useEffect(() => {
+    const to = searchParams.get('to');
+    if (to) {
+      setComposeMode('new');
+      setComposeTo(to);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Load thread detail ───────────────────────────────────────────────────
   useEffect(() => {
@@ -913,5 +927,13 @@ export default function MailPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function MailPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-20 text-gallery-light text-sm">Loading...</div>}>
+      <MailPageContent />
+    </Suspense>
   );
 }
