@@ -32,6 +32,7 @@ export async function GET(request) {
         type: Array.isArray(p.Type) ? p.Type[0] || '' : p.Type || '',
         notes: p.Notes || '',
         doNotEmail: !!p['Do Not Email'],
+        engagementScore: p['Engagement Score'] || 0,
       }));
 
     // Search filter
