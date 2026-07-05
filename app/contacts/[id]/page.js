@@ -89,6 +89,8 @@ export default function ContactDetailPage() {
   const [interests, setInterests] = useState('');
   const [savingFields, setSavingFields] = useState(false);
   const [savedFields, setSavedFields] = useState(false);
+  const [doNotEmail, setDoNotEmail] = useState(false);
+  const [savingDoNotEmail, setSavingDoNotEmail] = useState(false);
 
   useEffect(() => {
     fetch(`/api/contacts/${id}`)
@@ -100,6 +102,7 @@ export default function ContactDetailPage() {
         setLastContacted(data.lastContacted);
         setPipeline(data.contact?.Pipeline || '');
         setInterests(data.contact?.Interests || '');
+        setDoNotEmail(!!data.contact?.['Do Not Email']);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -122,6 +125,22 @@ export default function ContactDetailPage() {
       setNewNote('');
     } finally {
       setSavingNote(false);
+    }
+  };
+
+  const toggleDoNotEmail = async () => {
+    const next = !doNotEmail;
+    setSavingDoNotEmail(true);
+    try {
+      await fetch(`/api/contacts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 'Do Not Email': next }),
+      });
+      setDoNotEmail(next);
+      setContact((prev) => ({ ...prev, 'Do Not Email': next }));
+    } finally {
+      setSavingDoNotEmail(false);
     }
   };
 
@@ -240,6 +259,11 @@ export default function ContactDetailPage() {
               {contact.City && (
                 <span className="text-2xs text-gallery-light">· {contact.City}</span>
               )}
+              {doNotEmail && (
+                <span className="text-2xs px-2 py-0.5 bg-gray-100 text-gallery-light">
+                  Do not email
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-4 mt-2">
               {contact.Email && (
@@ -313,6 +337,25 @@ export default function ContactDetailPage() {
               </button>
               {savedFields && <span className="text-2xs text-gallery-success">Saved</span>}
             </div>
+          </div>
+
+          {/* Do Not Email */}
+          <div className="border border-gallery-border bg-gallery-white p-5">
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <div>
+                <div className="text-xs font-medium text-gallery-mid">Do not email</div>
+                <div className="text-2xs text-gallery-light mt-0.5">
+                  Excludes this contact from all future campaign sends.
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={doNotEmail}
+                onChange={toggleDoNotEmail}
+                disabled={savingDoNotEmail}
+                className="accent-gallery-mid flex-shrink-0"
+              />
+            </label>
           </div>
 
           {/* Notes */}
