@@ -60,6 +60,11 @@ if (pathname.startsWith('/api/cron')) {
 if (pathname === '/diez-newsletter.html' || pathname.startsWith('/api/newsletter')) {
   return NextResponse.next();
 }
+
+// Public: inbound webhooks (signature-verified inside the route itself)
+if (pathname.startsWith('/api/webhooks')) {
+  return NextResponse.next();
+}
   // Everything else requires the auth cookie with the derived token
   const authCookie = request.cookies.get('diez-mail-auth');
   const expected = await deriveAuthToken();
