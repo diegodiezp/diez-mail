@@ -42,6 +42,7 @@ export async function GET(request, { params }) {
     'Tracking ID': trackingData.tid,
     'Recipient Email': trackingData.email,
     Campaign: [trackingData.cid],
+    'Campaign ID': trackingData.cid,
     'Event Type': 'Click',
     Timestamp: new Date().toISOString(),
     Device: device,
