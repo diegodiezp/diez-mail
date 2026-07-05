@@ -165,9 +165,16 @@ export default function ContactsPage() {
                           <div className="text-2xs text-gallery-light truncate">{p.city}</div>
                         )}
                       </div>
-                      {p.type && (
-                        <span className="badge-client flex-shrink-0">{p.type}</span>
-                      )}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {p.doNotEmail && (
+                          <span className="text-2xs px-1.5 py-0.5 bg-gray-100 text-gallery-light" title="Marked Do Not Email">
+                            Do not email
+                          </span>
+                        )}
+                        {p.type && (
+                          <span className="badge-client">{p.type}</span>
+                        )}
+                      </div>
                     </div>
 
                   </div>
@@ -225,6 +232,11 @@ export default function ContactsPage() {
                   )}
                   <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
                     <div className="flex gap-2 flex-wrap">
+                      {selectedContact.doNotEmail && (
+                        <span className="text-2xs px-1.5 py-0.5 bg-gray-100 text-gallery-light">
+                          Do not email
+                        </span>
+                      )}
                       {selectedContact.type && (
                         <span className="badge-client">{selectedContact.type}</span>
                       )}
