@@ -5,6 +5,27 @@ import { sendCampaign } from '@/lib/resend';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 min: allows campaigns up to ~180 recipients
 
+// Shape a sendCampaign result into an Email Events record. Reused by the
+// logEvents closure below, which sendCampaign calls every 10 sends so
+// events land in Airtable as the campaign progresses rather than only
+// after the whole loop finishes (see lib/resend.js).
+function buildEventFields(result, campaignId) {
+  const eventFields = {
+    'Event ID': `sent-${result.trackingId || Date.now()}`,
+    'Tracking ID': result.trackingId || '',
+    'Recipient Email': result.email,
+    Campaign: [campaignId],
+    'Event Type': result.status === 'sent' ? 'Sent' : 'Failed',
+    Timestamp: new Date().toISOString(),
+    'Gmail Message ID': result.messageId || '',
+    'Error Message': result.error || '',
+  };
+  if (result.id) {
+    eventFields.Person = [result.id];
+  }
+  return eventFields;
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -101,7 +122,10 @@ export async function POST(request) {
       );
     }
 
-    // 2. Send emails (only to actualRecipients, which excludes already-sent)
+    // 2. Send emails (only to actualRecipients, which excludes already-sent).
+    //    Sent/Failed events are logged incrementally every 10 sends via
+    //    logEvents, not after the whole loop, so a timeout or crash partway
+    //    through doesn't lose events for recipients who already got the email.
     const results = await sendCampaign({
       campaignId: campaign.id,
       subject,
@@ -112,34 +136,12 @@ export async function POST(request) {
       cc: cc || null,
       bcc: bcc || null,
       delayMs: 1500,
+      logEvents: (batch) =>
+        createRecords('Email Events', batch.map((r) => buildEventFields(r, campaign.id))),
     });
 
-    // 3. Log send events for all recipients in batches of 10
-    //    (previously one Airtable write per recipient, sequential)
     const newSentCount = results.filter((r) => r.status === 'sent').length;
     const newFailedCount = results.filter((r) => r.status === 'failed').length;
-
-    const eventRecords = results.map((result) => {
-      const eventFields = {
-        'Event ID': `sent-${result.trackingId || Date.now()}`,
-        'Tracking ID': result.trackingId || '',
-        'Recipient Email': result.email,
-        Campaign: [campaign.id],
-        'Event Type': result.status === 'sent' ? 'Sent' : 'Failed',
-        Timestamp: new Date().toISOString(),
-        'Gmail Message ID': result.messageId || '',
-        'Error Message': result.error || '',
-      };
-
-      const recipient = actualRecipients.find((r) => r.email === result.email);
-      if (recipient?.id) {
-        eventFields.Person = [recipient.id];
-      }
-
-      return eventFields;
-    });
-
-    await createRecords('Email Events', eventRecords);
 
     // 4. Update campaign status and accumulate counts
     const totalSent = previousSentCount + newSentCount;
