@@ -70,6 +70,7 @@ export async function POST(request) {
     'Tracking ID': trackingData.tid,
     'Recipient Email': trackingData.email,
     Campaign: [trackingData.cid],
+    'Campaign ID': trackingData.cid,
     'Event Type': event_type,
     Timestamp: new Date().toISOString(),
     Device: device,
