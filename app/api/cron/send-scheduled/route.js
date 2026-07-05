@@ -36,7 +36,7 @@ export async function GET(request) {
         for (const personId of peopleIds) {
           try {
             const person = await fetchOne('People', personId);
-            if (person.Email && !alreadySent.has(person.Email)) {
+            if (person.Email && !alreadySent.has(person.Email) && !person['Do Not Email']) {
               recipients.push({
                 id: personId,
                 email: person.Email,
