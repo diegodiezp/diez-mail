@@ -12,5 +12,8 @@
         { "key": "Referrer-Policy", "value": "no-referrer" }
       ]
     }
+  ],
+  "crons": [
+    { "path": "/api/cron/update-scores", "schedule": "0 3 * * *" }
   ]
 }
