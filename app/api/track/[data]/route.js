@@ -27,9 +27,11 @@ export async function GET(request, { params }) {
 
     // Log the open event asynchronously (don't block the pixel response)
     logEmailEvent({
+      'Event ID': `open-${trackingData.tid}-${Date.now()}`,
       'Tracking ID': trackingData.tid,
       'Recipient Email': trackingData.email,
       Campaign: [trackingData.cid],
+      'Campaign ID': trackingData.cid,
       'Event Type': 'Open',
       Timestamp: new Date().toISOString(),
       Device: device,
