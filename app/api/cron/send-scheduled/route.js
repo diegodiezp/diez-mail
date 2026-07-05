@@ -5,6 +5,26 @@ import { sendCampaign } from '@/lib/resend';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 min: allows campaigns up to ~180 recipients
 
+// Shape a sendCampaign result into an Email Events record. Passed to
+// sendCampaign as logEvents, called every 10 sends so events land in
+// Airtable as the campaign progresses (see lib/resend.js).
+function buildEventFields(result, campaignId) {
+  const eventFields = {
+    'Event ID': `sent-${result.trackingId || Date.now()}`,
+    'Tracking ID': result.trackingId || '',
+    'Recipient Email': result.email,
+    Campaign: [campaignId],
+    'Event Type': result.status === 'sent' ? 'Sent' : 'Failed',
+    Timestamp: new Date().toISOString(),
+    'Gmail Message ID': result.messageId || '',
+    'Error Message': result.error || '',
+  };
+  if (result.id) {
+    eventFields.Person = [result.id];
+  }
+  return eventFields;
+}
+
 export async function GET(request) {
   // Verify Vercel cron secret
   const authHeader = request.headers.get('authorization');
@@ -60,31 +80,12 @@ export async function GET(request) {
           recipients,
           campaignId: campaign.id,
           pdfLink: campaign['PDF Link'] || '',
+          logEvents: (batch) =>
+            createRecords('Email Events', batch.map((r) => buildEventFields(r, campaign.id))),
         });
 
         const sentCount = results.filter((r) => r.status === 'sent').length;
         const failedCount = results.filter((r) => r.status !== 'sent').length;
-
-        // Log all events in batches of 10 instead of one-by-one
-        const eventRecords = results.map((result) => {
-          const eventFields = {
-            'Event ID': `sent-${result.trackingId || Date.now()}`,
-            'Tracking ID': result.trackingId || '',
-            'Recipient Email': result.email,
-            Campaign: [campaign.id],
-            'Event Type': result.status === 'sent' ? 'Sent' : 'Failed',
-            Timestamp: new Date().toISOString(),
-            'Gmail Message ID': result.messageId || '',
-            'Error Message': result.error || '',
-          };
-          const recipient = recipients.find((r) => r.email === result.email);
-          if (recipient?.id) {
-            eventFields.Person = [recipient.id];
-          }
-          return eventFields;
-        });
-
-        await createRecords('Email Events', eventRecords);
 
         await updateCampaign(campaign.id, {
           Status: failedCount === 0 ? 'Sent' : 'Partial',
