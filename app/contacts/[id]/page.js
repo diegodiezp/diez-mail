@@ -91,6 +91,10 @@ export default function ContactDetailPage() {
   const [savedFields, setSavedFields] = useState(false);
   const [doNotEmail, setDoNotEmail] = useState(false);
   const [savingDoNotEmail, setSavingDoNotEmail] = useState(false);
+  const [nextAction, setNextAction] = useState('');
+  const [nextActionDate, setNextActionDate] = useState('');
+  const [savingNextAction, setSavingNextAction] = useState(false);
+  const [savedNextAction, setSavedNextAction] = useState(false);
 
   useEffect(() => {
     fetch(`/api/contacts/${id}`)
@@ -103,6 +107,8 @@ export default function ContactDetailPage() {
         setPipeline(data.contact?.Pipeline || '');
         setInterests(data.contact?.Interests || '');
         setDoNotEmail(!!data.contact?.['Do Not Email']);
+        setNextAction(data.contact?.['Next Action'] || '');
+        setNextActionDate(data.contact?.['Next Action Date'] || '');
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -141,6 +147,24 @@ export default function ContactDetailPage() {
       setContact((prev) => ({ ...prev, 'Do Not Email': next }));
     } finally {
       setSavingDoNotEmail(false);
+    }
+  };
+
+  const saveNextAction = async () => {
+    setSavingNextAction(true);
+    setSavedNextAction(false);
+    try {
+      const fields = { 'Next Action': nextAction, 'Next Action Date': nextActionDate || null };
+      await fetch(`/api/contacts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      });
+      setContact((prev) => ({ ...prev, ...fields }));
+      setSavedNextAction(true);
+      setTimeout(() => setSavedNextAction(false), 2000);
+    } finally {
+      setSavingNextAction(false);
     }
   };
 
@@ -336,6 +360,43 @@ export default function ContactDetailPage() {
                 {savingFields ? 'Saving...' : 'Save'}
               </button>
               {savedFields && <span className="text-2xs text-gallery-success">Saved</span>}
+            </div>
+          </div>
+
+          {/* Next action */}
+          <div className="border border-gallery-border bg-gallery-white p-5">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gallery-mid mb-4">Next action</h3>
+
+            <div className="mb-4">
+              <label className="text-2xs text-gallery-light block mb-1">What's next</label>
+              <textarea
+                value={nextAction}
+                onChange={(e) => setNextAction(e.target.value)}
+                rows={2}
+                className="input-field text-xs w-full resize-none"
+                placeholder="e.g. Call to follow up on the studio visit"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="text-2xs text-gallery-light block mb-1">Date</label>
+              <input
+                type="date"
+                value={nextActionDate ? nextActionDate.slice(0, 10) : ''}
+                onChange={(e) => setNextActionDate(e.target.value)}
+                className="input-field text-xs w-full"
+              />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={saveNextAction}
+                disabled={savingNextAction}
+                className="btn-primary text-xs py-1.5 px-4 disabled:opacity-40"
+              >
+                {savingNextAction ? 'Saving...' : 'Save'}
+              </button>
+              {savedNextAction && <span className="text-2xs text-gallery-success">Saved</span>}
             </div>
           </div>
 
