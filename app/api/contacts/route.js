@@ -31,6 +31,7 @@ export async function GET(request) {
         company: p.Company || '',
         type: Array.isArray(p.Type) ? p.Type[0] || '' : p.Type || '',
         notes: p.Notes || '',
+        doNotEmail: !!p['Do Not Email'],
       }));
 
     // Search filter
