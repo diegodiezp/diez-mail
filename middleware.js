@@ -51,6 +51,11 @@ if (pathname.startsWith('/api/ev')) {
   return NextResponse.next();
 }
 
+// Public: manual/WhatsApp shortlink redirects
+if (pathname.startsWith('/s/')) {
+  return NextResponse.next();
+}
+
 // Public: cron route
 if (pathname.startsWith('/api/cron')) {
   return NextResponse.next();
