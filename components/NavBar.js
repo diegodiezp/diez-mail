@@ -68,6 +68,16 @@ export default function NavBar() {
             Contacts
           </Link>
           <Link
+            href="/links"
+            className={`text-xs sm:text-sm transition-colors pb-0.5 ${
+              isActive('/links')
+                ? 'text-gallery-black font-medium border-b border-gallery-black'
+                : 'text-gallery-mid hover:text-gallery-black border-b border-transparent'
+            }`}
+          >
+            Links
+          </Link>
+          <Link
             href="/followups"
             className={`text-xs sm:text-sm transition-colors pb-0.5 flex items-center gap-1.5 ${
               isActive('/followups')
