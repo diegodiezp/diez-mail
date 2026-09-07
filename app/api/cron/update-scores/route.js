@@ -1,46 +1,25 @@
 import { NextResponse } from 'next/server';
-import { getEventsForCampaign, getPeople, updateRecords, TABLES } from '@/lib/airtable';
-import { computeScores } from '@/lib/scoring';
+import { recomputeScores } from '@/lib/recompute-scores';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
+// Kept modest on purpose: the Hobby plan caps function duration well below
+// the 300s this used to ask for, and the runner has its own internal time
+// budget so it returns a report instead of being killed mid-write.
+export const maxDuration = 60;
 
 export async function GET(request) {
-  // Verify Vercel cron secret, same guard as the send-scheduled cron
+  // Verify Vercel cron secret
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    const [events, people] = await Promise.all([
-      getEventsForCampaign(null),
-      getPeople(),
-    ]);
-
-    const scores = computeScores(events);
-    const now = new Date().toISOString();
-
-    // Only write records whose score actually changed, to stay well under
-    // Airtable's rate limit on large contact lists.
-    const updates = [];
-    for (const person of people) {
-      if (!person.Email) continue;
-      const newScore = scores.get(person.Email) || 0;
-      const currentScore = person['Engagement Score'] || 0;
-      if (newScore !== currentScore) {
-        updates.push({
-          id: person.id,
-          fields: { 'Engagement Score': newScore, 'Score Updated': now },
-        });
-      }
-    }
-
-    if (updates.length > 0) {
-      await updateRecords(TABLES.people, updates);
-    }
-
-    return NextResponse.json({ ok: true, updated: updates.length, total: people.length });
+    const report = await recomputeScores();
+    // Logged as a single line so it is greppable in whatever log retention
+    // the plan happens to allow.
+    console.log('[update-scores]', JSON.stringify(report));
+    return NextResponse.json(report);
   } catch (error) {
     console.error('Update scores cron error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

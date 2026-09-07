@@ -23,6 +23,8 @@ export default function ContactsPage() {
   const [selectedContact, setSelectedContact] = useState(null);
   const [contactEvents, setContactEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcReport, setRecalcReport]   = useState(null);
 
   // Fetch contacts + campaigns in parallel
   useEffect(() => {
@@ -37,6 +39,27 @@ export default function ContactsPage() {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  // Recalculate engagement scores on demand. The nightly cron does the same
+  // work, but this reports back so a failure is visible instead of silent.
+  async function handleRecalculate() {
+    setRecalculating(true);
+    setRecalcReport(null);
+    try {
+      const res = await fetch('/api/scores/recalculate', { method: 'POST' });
+      const report = await res.json();
+      setRecalcReport(report);
+      // Pull the new scores into the list without a page reload.
+      if (report.updated > 0) {
+        const fresh = await fetch('/api/contacts').then((r) => r.json());
+        setPeople(fresh.people || []);
+      }
+    } catch (err) {
+      setRecalcReport({ ok: false, message: `Request failed: ${err.message}` });
+    } finally {
+      setRecalculating(false);
+    }
+  }
 
   // Campaign lookup map: Airtable record ID → campaign name
   const campaignMap = useMemo(() => {
@@ -96,9 +119,45 @@ export default function ContactsPage() {
     <div>
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <h1 className="font-serif italic text-3xl mb-2">Contacts</h1>
-      <p className="text-sm text-gallery-mid mb-6">
-        {people.length} people across Contacts and Clients
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <p className="text-sm text-gallery-mid">
+          {people.length} people across Contacts and Clients
+        </p>
+        <button
+          type="button"
+          onClick={handleRecalculate}
+          disabled={recalculating}
+          className="btn-secondary text-xs"
+        >
+          {recalculating ? 'Recalculating...' : 'Recalculate scores'}
+        </button>
+      </div>
+
+      {recalcReport && (
+        <div
+          className={`border p-4 mb-6 text-sm ${
+            recalcReport.ok
+              ? 'border-gallery-border bg-gallery-white'
+              : 'border-red-300 bg-red-50'
+          }`}
+        >
+          <div className={recalcReport.ok ? '' : 'text-red-700'}>
+            {recalcReport.message || 'Done.'}
+          </div>
+          {typeof recalcReport.events === 'number' && (
+            <div className="text-2xs text-gallery-mid mt-1.5">
+              {recalcReport.events} events read · {recalcReport.people} contacts ·{' '}
+              {recalcReport.toUpdate} needed changes ·{' '}
+              {Math.round((recalcReport.durationMs || 0) / 100) / 10}s
+            </div>
+          )}
+          {recalcReport.errors?.length > 0 && (
+            <div className="text-2xs text-red-700 mt-1.5 break-all">
+              First failure: {recalcReport.errors[0].message}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Summary stats ──────────────────────────────────────────────────── */}
       {!loading && stats && (
