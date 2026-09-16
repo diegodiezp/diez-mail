@@ -10,6 +10,15 @@ import { generateTrackingId } from '@/lib/tracking';
 
 export const dynamic = 'force-dynamic';
 
+// Manual links get shared by hand, over WhatsApp and in personal emails, so
+// they use a neutral short domain rather than the tracking host the campaign
+// infrastructure runs on. Falls back to the app URL when unset.
+function shortBaseUrl() {
+  return (
+    process.env.NEXT_PUBLIC_SHORT_URL || process.env.NEXT_PUBLIC_APP_URL
+  ).replace(/\/$/, '');
+}
+
 // 5 random bytes -> 7-char base64url code. No new dependency needed.
 function generateCode() {
   return crypto.randomBytes(5).toString('base64url');
@@ -18,7 +27,7 @@ function generateCode() {
 export async function GET() {
   try {
     const links = await getRecentShortLinks(30);
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const appUrl = shortBaseUrl();
     return NextResponse.json({
       links: links.map((l) => ({
         code: l.Code,
@@ -94,7 +103,7 @@ export async function POST(request) {
       console.error('Failed to log manual-link Sent event:', err)
     );
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const appUrl = shortBaseUrl();
     return NextResponse.json({
       url: `${appUrl}/s/${code}`,
       code,
