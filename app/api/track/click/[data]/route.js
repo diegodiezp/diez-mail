@@ -8,9 +8,11 @@ export async function GET(request, { params }) {
   const { data } = params;
   const trackingData = decodeTrackingData(data);
 
-  // No valid token or no destination: send to the app home, never error out
+  // No valid token or no destination: send to the public gallery site,
+  // never to the app's internal root (which requires login and would
+  // otherwise bounce a real recipient onto the dashboard sign-in screen).
   if (!trackingData || !trackingData.url) {
-    return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.redirect('https://diez.gallery');
   }
 
   // Validate the destination before redirecting.
@@ -20,11 +22,11 @@ export async function GET(request, { params }) {
   try {
     destination = new URL(trackingData.url);
     if (destination.protocol !== 'https:' && destination.protocol !== 'http:') {
-      return NextResponse.redirect(new URL('/', request.url));
+      return NextResponse.redirect('https://diez.gallery');
     }
   } catch {
     // trackingData.url wasn't a parseable URL at all
-    return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.redirect('https://diez.gallery');
   }
 
   // Extract device info
