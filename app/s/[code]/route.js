@@ -20,18 +20,21 @@ export async function GET(request, { params }) {
     link = null;
   }
 
+  // Missing, deleted, or unreadable link: send to the public gallery site,
+  // never to the app's internal root (which requires login and would
+  // otherwise bounce a real visitor onto the dashboard sign-in screen).
   if (!link || !link['Destination URL']) {
-    return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.redirect('https://diez.gallery');
   }
 
   let destination;
   try {
     destination = new URL(link['Destination URL']);
     if (destination.protocol !== 'https:' && destination.protocol !== 'http:') {
-      return NextResponse.redirect(new URL('/', request.url));
+      return NextResponse.redirect('https://diez.gallery');
     }
   } catch {
-    return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.redirect('https://diez.gallery');
   }
 
   const campaignId = link.Campaign?.[0];
