@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCampaigns, getCampaign, getEventsForCampaign, getPeople } from '@/lib/airtable';
+import { getCampaigns, getCampaignDetail, getEventsForCampaign } from '@/lib/airtable';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,101 +9,7 @@ export async function GET(request) {
     const campaignId = searchParams.get('id');
 
     if (campaignId) {
-      // Fetch campaign record + events + people in parallel.
-      // People is needed to resolve real names in the recipients table
-      // (events only store the email).
-      const [campaign, events, people] = await Promise.all([
-        getCampaign(campaignId),
-        getEventsForCampaign(campaignId),
-        getPeople({ fields: ['First Name', 'Last Name', 'Email'] }),
-      ]);
-
-      // email (lowercase) → "First Last"
-      const nameByEmail = {};
-      for (const p of people) {
-        if (p.Email) {
-          nameByEmail[p.Email.toLowerCase()] =
-            [p['First Name'], p['Last Name']].filter(Boolean).join(' ').trim();
-        }
-      }
-
-      // Aggregate stats per recipient
-      const recipients = {};
-      for (const event of events) {
-        const email = event['Recipient Email'];
-        if (!email) continue;
-
-        if (!recipients[email]) {
-          recipients[email] = {
-            email,
-            name: nameByEmail[email.toLowerCase()] || email,
-            personId: null,
-            sent: false,
-            opens: 0,
-            clicks: 0,
-            firstOpen: null,
-            lastOpen: null,
-            lastClick: null,
-            clickedUrls: [],
-            devices: new Set(),
-          };
-        }
-
-        const r = recipients[email];
-        const eventType = event['Event Type'];
-
-        if (eventType === 'Sent') {
-          r.sent = true;
-        } else if (eventType === 'Open') {
-          r.opens++;
-          const ts = event.Timestamp;
-          if (!r.firstOpen || ts < r.firstOpen) r.firstOpen = ts;
-          if (!r.lastOpen || ts > r.lastOpen) r.lastOpen = ts;
-          if (event.Device) r.devices.add(event.Device);
-        } else if (eventType === 'Click') {
-          r.clicks++;
-          const ts = event.Timestamp;
-          if (!r.lastClick || ts > r.lastClick) r.lastClick = ts;
-          if (event['Clicked URL']) r.clickedUrls.push(event['Clicked URL']);
-          if (event.Device) r.devices.add(event.Device);
-        }
-
-        if (event.Person?.length && !r.personId) {
-          r.personId = event.Person[0];
-        }
-      }
-
-      const recipientList = Object.values(recipients).map((r) => ({
-        ...r,
-        devices: Array.from(r.devices),
-        clickedUrls: [...new Set(r.clickedUrls)],
-      }));
-
-      const totalSent = recipientList.filter((r) => r.sent).length;
-      const totalOpened = recipientList.filter((r) => r.opens > 0).length;
-      const totalClicked = recipientList.filter((r) => r.clicks > 0).length;
-      const totalOpens = recipientList.reduce((sum, r) => sum + r.opens, 0);
-      const totalClicks = recipientList.reduce((sum, r) => sum + r.clicks, 0);
-
-      return NextResponse.json({
-        campaign: {
-          id: campaign.id,
-          name: campaign.Name || 'Untitled Campaign',
-          subject: campaign.Subject || null,
-          status: campaign.Status || null,
-        },
-        stats: {
-          sent: totalSent,
-          uniqueOpens: totalOpened,
-          totalOpens,
-          uniqueClicks: totalClicked,
-          totalClicks,
-          openRate: totalSent > 0 ? ((totalOpened / totalSent) * 100).toFixed(1) : 0,
-          clickRate: totalSent > 0 ? ((totalClicked / totalSent) * 100).toFixed(1) : 0,
-        },
-        recipients: recipientList.sort((a, b) => b.opens - a.opens),
-        events,
-      });
+      return NextResponse.json(await getCampaignDetail(campaignId));
     }
 
     // ── All campaigns list ────────────────────────────────────────────────────

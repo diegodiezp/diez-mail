@@ -128,6 +128,13 @@ export default function CampaignDetailPage() {
         </div>
         <div className="flex items-center gap-3 flex-shrink-0 mt-1">
           <a
+            href={`/api/campaigns/export?id=${params.id}`}
+            download
+            className="btn-secondary text-xs py-1.5 px-4"
+          >
+            Export CSV
+          </a>
+          <a
             href={`/campaigns/new?followup=${params.id}`}
             className="btn-secondary text-xs py-1.5 px-4"
           >

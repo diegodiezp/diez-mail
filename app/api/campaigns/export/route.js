@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCampaigns, getEventsForCampaign } from '@/lib/airtable';
+import { getCampaigns, getCampaignDetail, getEventsForCampaign } from '@/lib/airtable';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,8 +13,63 @@ function toRow(values) {
   return values.map(csvEscape).join(',') + '\r\n';
 }
 
-export async function GET() {
+function csvResponse(csv, filename) {
+  return new NextResponse(csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  });
+}
+
+// One campaign: every recipient it was sent to, with their open/click stats.
+async function exportCampaignRecipients(campaignId) {
+  const { campaign, recipients } = await getCampaignDetail(campaignId);
+
+  const header = toRow([
+    'Email',
+    'Name',
+    'Sent',
+    'Opens',
+    'Clicks',
+    'First Open',
+    'Last Open',
+    'Last Click',
+    'Devices',
+    'Clicked URLs',
+  ]);
+
+  const rows = recipients
+    .map((r) =>
+      toRow([
+        r.email,
+        r.name,
+        r.sent ? 'Yes' : 'No',
+        r.opens,
+        r.clicks,
+        r.firstOpen || '',
+        r.lastOpen || '',
+        r.lastClick || '',
+        r.devices.join(', '),
+        r.clickedUrls.join(', '),
+      ])
+    )
+    .join('');
+
+  const safeName = (campaign.name || 'campaign').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  return csvResponse(header + rows, `${safeName}-recipients.csv`);
+}
+
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const campaignId = searchParams.get('id');
+
+    if (campaignId) {
+      return await exportCampaignRecipients(campaignId);
+    }
+
     const [campaigns, allEvents] = await Promise.all([
       getCampaigns(),
       getEventsForCampaign(null),
@@ -81,16 +136,8 @@ export async function GET() {
       })
       .join('');
 
-    const csv = header + rows;
     const today = new Date().toISOString().slice(0, 10);
-
-    return new NextResponse(csv, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="diez-mail-campaigns-${today}.csv"`,
-      },
-    });
+    return csvResponse(header + rows, `diez-mail-campaigns-${today}.csv`);
   } catch (error) {
     console.error('Campaigns export error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
