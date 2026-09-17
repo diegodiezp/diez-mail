@@ -401,6 +401,19 @@ function NewCampaignContent() {
     }
   }, [editingPersonId, step]);
 
+  // Same restore, for the compose editor. It's deliberately uncontrolled (see
+  // the campaign-loading effect above), so React never re-fills it. Stepping
+  // forward to personalize/confirm unmounts it, and stepping back mounts an
+  // empty one even though `body` still holds the text — which then gets wiped
+  // for real by the empty editor's own onInput/onBlur.
+  // Keyed on `step` alone on purpose: adding `body` would rewrite the node on
+  // every keystroke and send the cursor back to the start.
+  useEffect(() => {
+    if (step === 'compose' && editorRef.current) {
+      editorRef.current.innerHTML = body;
+    }
+  }, [step]);
+
   // Save as template
   const handleSaveTemplate = async () => {
     const name = prompt('Template name:');
