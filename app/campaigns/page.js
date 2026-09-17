@@ -60,11 +60,16 @@ export default function CampaignsPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-serif italic text-3xl mb-1">Campaigns</h1>
-        <p className="text-sm text-gallery-mid">
-          {campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-serif italic text-3xl mb-1">Campaigns</h1>
+          <p className="text-sm text-gallery-mid">
+            {campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <a href="/api/campaigns/export" download className="btn-secondary whitespace-nowrap">
+          Export CSV
+        </a>
       </div>
 
       {!loading && summaryStats && (
