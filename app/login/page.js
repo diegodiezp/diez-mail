@@ -32,87 +32,40 @@ export default function LoginPage() {
     }
   };
 
+  // Heights subtract the root layout's own vertical padding (py-6 / sm:py-8)
+  // so the form centres without pushing the page into a scroll.
   return (
-    <html lang="en">
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body style={{
-        margin: 0,
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#fafafa',
-        fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica Neue, sans-serif',
-      }}>
-        <div style={{ width: '100%', maxWidth: '320px', padding: '0 20px' }}>
-          <h1 style={{
-            fontFamily: 'EB Garamond, Georgia, serif',
-            fontStyle: 'italic',
-            fontSize: '28px',
-            fontWeight: 400,
-            textAlign: 'center',
-            marginBottom: '32px',
-            color: '#1a1a1a',
-          }}>
-            Diez Mail
-          </h1>
+    <div className="flex items-center justify-center min-h-[calc(100svh-3rem)] sm:min-h-[calc(100svh-4rem)]">
+      <div className="w-full max-w-[320px]">
+        <h1 className="font-serif italic text-3xl text-center mb-8">Diez Mail</h1>
 
-          <form onSubmit={handleSubmit}>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              autoFocus
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '14px',
-                border: '1px solid #e0e0e0',
-                backgroundColor: '#ffffff',
-                color: '#1a1a1a',
-                outline: 'none',
-                boxSizing: 'border-box',
-                marginBottom: '12px',
-              }}
-            />
+        <form onSubmit={handleSubmit}>
+          {/* text-base keeps the font at 16px: below that, iOS Safari zooms the
+              page in on focus and the viewport never zooms back out. */}
+          <input
+            type="password"
+            name="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            autoFocus
+            className="input-field text-base mb-3"
+          />
 
-            <button
-              type="submit"
-              disabled={loading || !password}
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '14px',
-                fontWeight: 500,
-                backgroundColor: '#1a1a1a',
-                color: '#ffffff',
-                border: 'none',
-                cursor: loading || !password ? 'not-allowed' : 'pointer',
-                opacity: loading || !password ? 0.4 : 1,
-              }}
-            >
-              {loading ? 'Verifying...' : 'Enter'}
-            </button>
+          <button
+            type="submit"
+            disabled={loading || !password}
+            className="btn-primary w-full justify-center"
+          >
+            {loading ? 'Verifying...' : 'Enter'}
+          </button>
 
-            {error && (
-              <p style={{
-                color: '#c45a3c',
-                fontSize: '13px',
-                textAlign: 'center',
-                marginTop: '12px',
-              }}>
-                {error}
-              </p>
-            )}
-          </form>
-        </div>
-      </body>
-    </html>
+          {error && (
+            <p className="text-sm text-center text-gallery-accent mt-3">{error}</p>
+          )}
+        </form>
+      </div>
+    </div>
   );
 }

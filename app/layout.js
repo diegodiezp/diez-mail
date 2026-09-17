@@ -11,29 +11,30 @@ export const metadata = {
   title: 'Diez Mail',
   description: 'Email campaigns for Diez Gallery',
   manifest: '/manifest.json',
-  themeColor: '#1a1a1a',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'Diez Mail',
   },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+};
+
+// Next 14 ignores viewport and themeColor declared inside `metadata` (it logs
+// "Unsupported metadata viewport is configured..." at build time and emits no
+// tag at all). The app therefore shipped with NO viewport meta, so phones fell
+// back to a ~980px canvas and rendered every page zoomed out. They have to live
+// in their own export.
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#1a1a1a',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={dmSans.className}>
       <head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#1a1a1a" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Diez Mail" />
+        {/* Everything else (manifest, theme-color, apple-mobile-web-app-*) is
+            emitted by the metadata and viewport exports above. */}
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
       <body className="bg-gallery-bg text-gallery-black font-sans antialiased">

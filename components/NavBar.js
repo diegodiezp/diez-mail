@@ -17,16 +17,21 @@ export default function NavBar() {
       .catch(() => {});
   }, []);
 
+  // The login screen is the one page without a session, so it gets no nav.
+  if (pathname === '/login') return null;
+
   return (
     <nav className="border-b border-gallery-border bg-gallery-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <Link
           href="/"
           className="font-serif italic text-lg sm:text-xl text-gallery-black hover:opacity-70 transition-opacity"
         >
           Diez Mail
         </Link>
-        <div className="flex items-center gap-6 sm:gap-8">
+        {/* Wraps instead of overflowing: seven items plus a button never fit on
+            one phone-width line. */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 sm:gap-x-8">
           <Link
             href="/"
             className={`text-xs sm:text-sm transition-colors pb-0.5 ${
