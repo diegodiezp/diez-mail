@@ -115,6 +115,10 @@ function NewCampaignContent() {
   // Type filters (loaded from Airtable on mount)
   const [typeFilters, setTypeFilters] = useState([ALL_FILTER]);
 
+  // Which of the two compose panes is showing on a phone ('contacts' | 'compose').
+  // Ignored from sm upwards, where both are side by side.
+  const [mobilePane, setMobilePane] = useState('contacts');
+
   // Recipients
   const [allPeople, setAllPeople]         = useState([]);
   const [filteredPeople, setFilteredPeople] = useState([]);
@@ -579,7 +583,7 @@ function NewCampaignContent() {
         >
           ← Back to personalize
         </button>
-        <h1 className="font-serif italic text-3xl mb-8">Confirm &amp; Send</h1>
+        <h1 className="font-serif italic text-2xl sm:text-3xl mb-8">Confirm &amp; Send</h1>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="space-y-4">
             <div className="stat-card">
@@ -721,9 +725,9 @@ function NewCampaignContent() {
         >
           ← Back to compose
         </button>
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
-            <h1 className="font-serif italic text-3xl mb-1">Personalize</h1>
+            <h1 className="font-serif italic text-2xl sm:text-3xl mb-1">Personalize</h1>
             <p className="text-sm text-gallery-mid">
               Edit individual messages before sending. Click a name to customize their email.
             </p>
@@ -733,19 +737,16 @@ function NewCampaignContent() {
               saveCurrentPersonBody();
               setStep('confirm');
             }}
-            className="btn-primary py-2.5 px-6"
+            className="btn-primary py-2.5 px-6 w-full sm:w-auto justify-center"
           >
             Review &amp; Send ({recipientList.length})
           </button>
         </div>
 
-        <div
-          className="flex flex-col sm:flex-row gap-0 border border-gallery-border bg-gallery-white"
-          style={{ height: 'calc(100vh - 200px)' }}
-        >
+        <div className="flex flex-col sm:flex-row gap-0 border border-gallery-border bg-gallery-white sm:h-[calc(100dvh-200px)]">
           {/* Left: recipient list */}
           <div
-            className="w-full sm:w-[240px] flex flex-col flex-1 sm:flex-shrink-0 border-b sm:border-b-0 sm:border-r border-gallery-border overflow-y-auto"
+            className="w-full sm:w-[240px] max-h-[40vh] sm:max-h-none flex flex-col flex-1 sm:flex-shrink-0 border-b sm:border-b-0 sm:border-r border-gallery-border overflow-y-auto"
           >
             {recipientList.map((p) => {
               const sigBlock = includeSig ? `<br/><br/>${SIGNATURE_HTML}` : '';
@@ -796,7 +797,7 @@ function NewCampaignContent() {
                     Reset to template
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto px-6 py-5">
+                <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5">
                   <div
                     ref={personalizeEditorRef}
                     contentEditable
@@ -816,13 +817,34 @@ function NewCampaignContent() {
 
   // ── Compose — Arternal-style ──────────────────────────────────────────────
   return (
-    <div
-      className="flex flex-col sm:flex-row"
-      style={{ height: 'calc(100vh - 64px)', overflow: 'hidden', margin: '-24px -24px 0' }}
-    >
+    <div className="full-bleed pane-full flex flex-col">
+      {/* Phone-only switch: the two panes don't fit side by side, and splitting
+          the screen leaves neither usable once the keyboard is up. */}
+      <div className="sm:hidden flex border-b border-gallery-border bg-gallery-white flex-shrink-0">
+        {[
+          { key: 'contacts', label: `Contacts${selected.size ? ` (${selected.size})` : ''}` },
+          { key: 'compose', label: 'Compose' },
+        ].map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setMobilePane(t.key)}
+            className={`flex-1 py-3 text-xs transition-colors ${
+              mobilePane === t.key
+                ? 'text-gallery-black font-medium border-b-2 border-gallery-black'
+                : 'text-gallery-mid border-b-2 border-transparent'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 min-h-0 flex flex-col sm:flex-row">
       {/* ── LEFT: Contacts panel ──────────────────────────────────────────── */}
       <div
-        className="w-full sm:w-[240px] flex flex-col flex-1 sm:flex-shrink-0 border-b sm:border-b-0 sm:border-r border-gallery-border bg-gallery-white overflow-y-auto"
+        className={`${
+          mobilePane === 'contacts' ? 'flex' : 'hidden'
+        } sm:flex w-full sm:w-[240px] flex-col flex-1 sm:flex-shrink-0 min-h-0 border-b sm:border-b-0 sm:border-r border-gallery-border bg-gallery-white overflow-y-auto`}
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-gallery-border">
@@ -965,10 +987,14 @@ function NewCampaignContent() {
       </div>
 
       {/* ── RIGHT: Compose area ───────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-gallery-white">
+      <div
+        className={`${
+          mobilePane === 'compose' ? 'flex' : 'hidden'
+        } sm:flex flex-1 min-w-0 flex-col overflow-hidden bg-gallery-white`}
+      >
 
         {/* Campaign name top bar */}
-        <div className="flex items-center gap-3 px-6 py-2 border-b border-gallery-border">
+        <div className="flex items-center gap-3 px-4 sm:px-6 py-2 border-b border-gallery-border">
           <span className="text-2xs font-medium uppercase tracking-wider text-gallery-mid flex-shrink-0">
             Campaign:
           </span>
@@ -1005,7 +1031,7 @@ function NewCampaignContent() {
         </div>
 
         {/* To */}
-        <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gallery-border">
+        <div className="flex items-center gap-3 px-4 sm:px-6 py-2.5 border-b border-gallery-border">
           <span className="text-sm text-gallery-mid w-6 flex-shrink-0">To</span>
           <div className={`flex-1 text-sm ${selected.size ? 'text-gallery-black' : 'text-gallery-light italic'}`}>
             {selected.size === 0
@@ -1020,7 +1046,7 @@ function NewCampaignContent() {
         </div>
 
         {/* Cc */}
-        <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gallery-border">
+        <div className="flex items-center gap-3 px-4 sm:px-6 py-2.5 border-b border-gallery-border">
           <span className="text-sm text-gallery-mid w-6 flex-shrink-0">Cc</span>
           <input
             value={cc}
@@ -1031,7 +1057,7 @@ function NewCampaignContent() {
         </div>
 
         {/* Bcc */}
-        <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gallery-border">
+        <div className="flex items-center gap-3 px-4 sm:px-6 py-2.5 border-b border-gallery-border">
           <span className="text-sm text-gallery-mid w-6 flex-shrink-0">Bcc</span>
           <input
             value={bcc}
@@ -1043,14 +1069,14 @@ function NewCampaignContent() {
 
         {/* Cc/Bcc apply to EVERY email in the send: warn when sending to many */}
         {(cc.trim() || bcc.trim()) && selected.size > 1 && (
-          <div className="px-6 py-2 bg-orange-50 border-b border-orange-200 text-2xs text-orange-700 leading-relaxed">
+          <div className="px-4 sm:px-6 py-2 bg-orange-50 border-b border-orange-200 text-2xs text-orange-700 leading-relaxed">
             Cc/Bcc apply to all {selected.size} emails in this send. For a single
             institution, select one contact and put the rest in Cc.
           </div>
         )}
 
         {/* Subject */}
-        <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gallery-border">
+        <div className="flex items-center gap-3 px-4 sm:px-6 py-2.5 border-b border-gallery-border">
           <input
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
@@ -1060,7 +1086,7 @@ function NewCampaignContent() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center gap-1 px-6 py-2 border-b border-gallery-border flex-wrap">
+        <div className="flex items-center gap-1 px-4 sm:px-6 py-2 border-b border-gallery-border flex-wrap">
           {[
             { label: 'B', cmd: 'bold',      cls: 'font-bold' },
             { label: 'I', cmd: 'italic',    cls: 'italic' },
@@ -1269,7 +1295,7 @@ function NewCampaignContent() {
 
         {/* Body — contentEditable rich text */}
         <FormatToolbar editorRef={editorRef} />
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5">
           <div
             ref={editorRef}
             contentEditable
@@ -1282,7 +1308,7 @@ function NewCampaignContent() {
         </div>
 
         {/* Signature */}
-        <div className="px-6 border-t border-gallery-border">
+        <div className="px-4 sm:px-6 border-t border-gallery-border">
           <label className="flex items-center gap-2 py-3 cursor-pointer">
             <input
               type="checkbox"
@@ -1298,6 +1324,7 @@ function NewCampaignContent() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

@@ -62,7 +62,7 @@ export default function CampaignsPage() {
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-serif italic text-3xl mb-1">Campaigns</h1>
+          <h1 className="font-serif italic text-2xl sm:text-3xl mb-1">Campaigns</h1>
           <p className="text-sm text-gallery-mid">
             {campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}
           </p>

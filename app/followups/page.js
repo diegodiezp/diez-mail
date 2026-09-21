@@ -67,7 +67,7 @@ export default function FollowupsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-serif italic text-3xl mb-1">Follow-ups</h1>
+        <h1 className="font-serif italic text-2xl sm:text-3xl mb-1">Follow-ups</h1>
         <p className="text-sm text-gallery-mid">
           {followups.length} contact{followups.length !== 1 ? 's' : ''} showed interest and haven't been followed up
         </p>
