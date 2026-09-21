@@ -307,9 +307,9 @@ export default function HomePage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-baseline justify-between">
+      <div className="mb-6 flex items-baseline justify-between gap-4">
         <div>
-          <h1 className="font-serif italic text-3xl mb-1">Activity</h1>
+          <h1 className="font-serif italic text-2xl sm:text-3xl mb-1">Activity</h1>
           <p className="text-sm text-gallery-mid">Latest engagement across all campaigns</p>
         </div>
         {today != null && (

@@ -3,9 +3,25 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Total height of the sticky nav, border included, so full-height panes
+       can size themselves with calc() instead of a magic number. */
+    --nav-h: 57px;
+  }
+
+  @media (min-width: 640px) {
+    :root {
+      --nav-h: 69px;
+    }
+  }
+
   body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Stops a stray wide child (tables, long URLs) from side-scrolling the
+       whole page on a phone. `clip` instead of `hidden` so the sticky nav
+       keeps working. */
+    overflow-x: clip;
   }
 
   ::selection {
@@ -89,4 +105,81 @@
 .auto-resize {
   field-sizing: content;
   min-height: 120px;
+}
+
+@layer utilities {
+  /* Respect the notch / rounded corners in standalone (PWA) mode */
+  .safe-px {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  @media (min-width: 640px) {
+    .safe-px {
+      padding-left: max(1.5rem, env(safe-area-inset-left));
+      padding-right: max(1.5rem, env(safe-area-inset-right));
+    }
+  }
+
+  /* Keeps the last row of a page clear of the iOS home indicator when the app
+     runs from the home screen (viewport-fit=cover). Resolves to the plain
+     padding everywhere else. */
+  .safe-pb {
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  @media (min-width: 640px) {
+    .safe-pb {
+      padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  .nav-row {
+    height: calc(var(--nav-h) - 1px);
+  }
+
+  /* Cancels <main>'s gutters so a pane can run edge to edge. The values must
+     mirror the padding in AppShell. */
+  .full-bleed {
+    margin: -1.5rem -1rem;
+  }
+
+  @media (min-width: 640px) {
+    .full-bleed {
+      margin: -2rem -1.5rem;
+    }
+  }
+
+  /* Fills whatever is left under the nav. dvh so the iOS URL bar collapsing
+     doesn't leave a dead strip at the bottom. */
+  .pane-full {
+    height: calc(100vh - var(--nav-h));
+    height: calc(100dvh - var(--nav-h) - env(safe-area-inset-bottom, 0px));
+    overflow: hidden;
+  }
+}
+
+/* Gmail HTML bodies carry their own widths; keep them inside the reading pane
+   instead of stretching the layout on a phone. */
+.mail-body img,
+.mail-body video {
+  max-width: 100%;
+  height: auto;
+}
+
+.mail-body table {
+  max-width: 100%;
+}
+
+/* iOS zooms the viewport whenever a focused field renders under 16px, which
+   throws the layout off and is hard to come back from. The app's type scale is
+   smaller than that, so lift fields to 16px on phones only. Unlayered and more
+   specific than .input-field so it actually wins. */
+@media (max-width: 639px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea,
+  [contenteditable='true'] {
+    font-size: 16px;
+  }
 }

@@ -139,7 +139,7 @@ export default function LinksPage() {
 
   return (
     <div>
-      <h1 className="font-serif italic text-3xl mb-2">Manual Links</h1>
+      <h1 className="font-serif italic text-2xl sm:text-3xl mb-2">Manual Links</h1>
       <p className="text-sm text-gallery-mid mb-8">
         Generate a tracked link to share by hand, over WhatsApp or anywhere else.
         Clicks and any activity that follows in the viewing room are logged the

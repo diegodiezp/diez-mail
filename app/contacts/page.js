@@ -118,7 +118,7 @@ export default function ContactsPage() {
   return (
     <div>
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <h1 className="font-serif italic text-3xl mb-2">Contacts</h1>
+      <h1 className="font-serif italic text-2xl sm:text-3xl mb-2">Contacts</h1>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <p className="text-sm text-gallery-mid">
           {people.length} people across Contacts and Clients

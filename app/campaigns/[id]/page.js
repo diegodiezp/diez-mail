@@ -117,16 +117,16 @@ export default function CampaignDetailPage() {
       </a>
 
       {/* ── Campaign header with real name ───────────────────────────────── */}
-      <div className="flex items-start justify-between mb-8 gap-4">
-        <div>
-          <h1 className="font-serif italic text-3xl mb-1">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-8 gap-4">
+        <div className="min-w-0">
+          <h1 className="font-serif italic text-2xl sm:text-3xl mb-1 break-words">
             {campaign?.name || 'Campaign Detail'}
           </h1>
           {campaign?.subject && (
-            <p className="text-sm text-gallery-mid">{campaign.subject}</p>
+            <p className="text-sm text-gallery-mid break-words">{campaign.subject}</p>
           )}
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0 mt-1">
+        <div className="flex items-center flex-wrap gap-3 sm:flex-shrink-0 sm:mt-1">
           <a
             href={`/campaigns/new?followup=${params.id}`}
             className="btn-secondary text-xs py-1.5 px-4"

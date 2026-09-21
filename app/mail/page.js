@@ -418,14 +418,12 @@ function MailPageContent() {
   const isThreadUnread = threadMessages[threadMessages.length - 1]?.isUnread ?? false;
 
   return (
-    <div
-      className="flex flex-col sm:flex-row"
-      style={{ height: 'calc(100vh - 64px)', overflow: 'hidden', margin: '-24px -24px 0' }}
-    >
+    <div className="flex flex-col sm:flex-row full-bleed pane-full">
       {/* ── LEFT: Thread list ──────────────────────────────────────────── */}
       <div
-        className="hidden sm:flex flex-col border-r border-gallery-border bg-gallery-white flex-shrink-0"
-        style={{ width: 360 }}
+        className={`${
+          selectedThreadId || composeMode ? 'hidden' : 'flex'
+        } sm:flex flex-col w-full sm:w-[360px] h-full border-r border-gallery-border bg-gallery-white flex-shrink-0`}
       >
         {/* Compose + search + tabs */}
         <div className="px-4 py-3 border-b border-gallery-border">
@@ -536,12 +534,16 @@ function MailPageContent() {
       </div>
 
       {/* ── RIGHT: Compose / Thread detail / Empty ────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-gallery-white">
+      <div
+        className={`${
+          selectedThreadId || composeMode ? 'flex' : 'hidden'
+        } sm:flex flex-1 min-w-0 flex-col overflow-hidden bg-gallery-white`}
+      >
 
         {/* COMPOSE PANEL */}
         {composeMode ? (
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b border-gallery-border flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-4 border-b border-gallery-border flex items-center justify-between">
               <h2 className="text-base font-medium text-gallery-black">
                 {composeMode === 'forward' ? 'Forward' : 'New Message'}
               </h2>
@@ -555,7 +557,7 @@ function MailPageContent() {
 
             <div className="flex-1 overflow-y-auto flex flex-col">
               {/* To */}
-              <div className="border-b border-gallery-border px-6 py-2.5 flex items-center gap-2">
+              <div className="border-b border-gallery-border px-4 sm:px-6 py-2.5 flex items-center gap-2">
                 <span className="text-xs text-gallery-light w-8 flex-shrink-0">To</span>
                 <input
                   type="text"
@@ -575,7 +577,7 @@ function MailPageContent() {
               </div>
               {/* Cc */}
               {showCc && (
-                <div className="border-b border-gallery-border px-6 py-2.5 flex items-center gap-2">
+                <div className="border-b border-gallery-border px-4 sm:px-6 py-2.5 flex items-center gap-2">
                   <span className="text-xs text-gallery-light w-8 flex-shrink-0">Cc</span>
                   <input
                     type="text"
@@ -589,7 +591,7 @@ function MailPageContent() {
               )}
               {/* Bcc */}
               {showBcc && (
-                <div className="border-b border-gallery-border px-6 py-2.5 flex items-center gap-2">
+                <div className="border-b border-gallery-border px-4 sm:px-6 py-2.5 flex items-center gap-2">
                   <span className="text-xs text-gallery-light w-8 flex-shrink-0">Bcc</span>
                   <input
                     type="text"
@@ -602,7 +604,7 @@ function MailPageContent() {
                 </div>
               )}
               {/* Subject */}
-              <div className="border-b border-gallery-border px-6 py-2.5 flex items-center gap-2">
+              <div className="border-b border-gallery-border px-4 sm:px-6 py-2.5 flex items-center gap-2">
                 <span className="text-xs text-gallery-light w-8 flex-shrink-0">Sub</span>
                 <input
                   type="text"
@@ -615,7 +617,7 @@ function MailPageContent() {
               {/* Toolbar */}
               <FormatToolbar editorRef={composeEditorRef} />
               {/* Body */}
-              <div className="flex-1 px-6 py-4">
+              <div className="flex-1 px-4 sm:px-6 py-4">
                 <div
                   ref={composeEditorRef}
                   contentEditable
@@ -626,7 +628,7 @@ function MailPageContent() {
               </div>
             </div>
 
-            <div className="border-t border-gallery-border px-6 py-3">
+            <div className="border-t border-gallery-border px-4 sm:px-6 py-3">
               {composeResult?.success && (
                 <div className="mb-2 text-sm text-gallery-success">Sent successfully</div>
               )}
@@ -675,9 +677,15 @@ function MailPageContent() {
         ) : (
           <>
             {/* Thread header */}
-            <div className="px-6 py-4 border-b border-gallery-border flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-medium text-gallery-black">
+            <div className="px-4 sm:px-6 py-4 border-b border-gallery-border flex items-start justify-between gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <button
+                  onClick={() => setSelectedThreadId(null)}
+                  className="sm:hidden text-2xs text-gallery-mid hover:text-gallery-black transition-colors mb-1"
+                >
+                  ← All conversations
+                </button>
+                <h2 className="text-base sm:text-lg font-medium text-gallery-black break-words">
                   {threadMessages[0]?.subject || '(no subject)'}
                 </h2>
                 <div className="text-2xs text-gallery-mid mt-1">
@@ -735,23 +743,23 @@ function MailPageContent() {
               {threadMessages.map((msg) => {
                 const isMe = msg.from.email?.toLowerCase() === senderEmail.toLowerCase();
                 return (
-                  <div key={msg.id} className="px-6 py-5 border-b border-gallery-border">
+                  <div key={msg.id} className="px-4 sm:px-6 py-5 border-b border-gallery-border">
                     {/* Message header */}
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
                         <div className={`w-8 h-8 flex items-center justify-center text-xs font-medium flex-shrink-0 ${
                           isMe ? 'bg-gallery-accent text-white' : 'bg-gallery-bg text-gallery-mid border border-gallery-border'
                         }`}>
                           {isMe ? 'DD' : (msg.from.name?.[0] || '?').toUpperCase()}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm font-medium truncate">
                               {isMe ? 'Diego Diez' : msg.from.name || msg.from.email}
                             </span>
                             {msg.contact && <ContactBadge contact={msg.contact} />}
                           </div>
-                          <div className="text-2xs text-gallery-light">
+                          <div className="text-2xs text-gallery-light truncate">
                             to {isMe ? msg.to : 'me'}
                             {msg.cc && <span className="ml-1">· cc {msg.cc}</span>}
                           </div>
@@ -778,7 +786,7 @@ function MailPageContent() {
                       <div
                         className="text-sm leading-relaxed mail-body"
                         dangerouslySetInnerHTML={{ __html: msg.htmlBody }}
-                        style={{ maxWidth: '100%', overflow: 'hidden', wordBreak: 'break-word' }}
+                        style={{ maxWidth: '100%', overflowX: 'auto', wordBreak: 'break-word' }}
                       />
                     ) : (
                       <div className="text-sm leading-relaxed text-gallery-dark whitespace-pre-wrap">
@@ -819,14 +827,14 @@ function MailPageContent() {
             {/* Reply area */}
             <div className="border-t border-gallery-border">
               {replyResult?.success && (
-                <div className="px-6 py-2 bg-green-50 text-sm text-gallery-success">Reply sent with tracking</div>
+                <div className="px-4 sm:px-6 py-2 bg-green-50 text-sm text-gallery-success">Reply sent with tracking</div>
               )}
               {replyResult && !replyResult.success && (
-                <div className="px-6 py-2 bg-red-50 text-sm text-red-700">Error: {replyResult.error}</div>
+                <div className="px-4 sm:px-6 py-2 bg-red-50 text-sm text-red-700">Error: {replyResult.error}</div>
               )}
 
               {!showReply ? (
-                <div className="px-6 py-3 flex items-center gap-3">
+                <div className="px-4 sm:px-6 py-3 flex items-center gap-3">
                   <button
                     onClick={() => {
                       setReplyAll(false);
@@ -870,7 +878,7 @@ function MailPageContent() {
                   </button>
                 </div>
               ) : (
-                <div className="px-6 py-4">
+                <div className="px-4 sm:px-6 py-4">
                   {(() => {
                     const lastMsg = threadMessages[threadMessages.length - 1];
                     const { toEmail, cc } = computeReplyRecipients(lastMsg, senderEmail, replyAll);
