@@ -1,25 +1,37 @@
 import { NextResponse } from 'next/server';
-import { logEmailEvent } from '@/lib/airtable';
+import { getPersonByEmail } from '@/lib/airtable';
 import { decodeTrackingData } from '@/lib/gmail';
 
 export const dynamic = 'force-dynamic';
 
+// Receives active-time heartbeats from rooms.diez.gallery. Unlike /api/ev,
+// which creates one row per event, this keeps ONE Email Events row per
+// viewing-room session and updates its Active Seconds (upsert on Session ID).
+// "Room Heartbeat" is not in lib/scoring.js POINTS, so it never affects the
+// engagement score; it only feeds the Active Seconds rollups on People.
+
 const ALLOWED_ORIGIN = 'https://rooms.diez.gallery';
-
-const ALLOWED_EVENT_TYPES = new Set([
-  'Viewing Room Open',
-  'Artwork View',
-  'Inquire Click',
-]);
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Credentials': 'true',
 };
 
-// Preflight
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_SECONDS = 3600;
+
+// Tracking token -> Person record id, cached while the function stays warm so
+// a 5-minute visit costs one People lookup instead of twenty.
+const personCache = new Map();
+
+async function resolvePersonId(email) {
+  if (personCache.has(email)) return personCache.get(email);
+  const person = await getPersonByEmail(email).catch(() => null);
+  const id = person?.id || null;
+  personCache.set(email, id);
+  return id;
+}
+
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
@@ -27,66 +39,66 @@ export async function OPTIONS() {
 export async function POST(request) {
   let body;
   try {
-    body = await request.json();
+    // Sent as text/plain by sendBeacon to avoid a CORS preflight
+    body = JSON.parse(await request.text());
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: corsHeaders });
+    return new NextResponse(null, { status: 400, headers: corsHeaders });
   }
 
-  const { t, event_type, artwork_id, artwork_title } = body || {};
+  const { t, session_id, active_seconds } = body || {};
+  if (!t) return new NextResponse(null, { status: 204, headers: corsHeaders });
 
-  // Silent rejection if no tracking token: this means an anonymous visitor
-  // (someone who reached the viewing room via Instagram, forward, etc.).
-  // We intentionally do NOT log these. Return 204 so the client moves on.
-  if (!t) {
-    return new NextResponse(null, { status: 204, headers: corsHeaders });
-  }
-
-  if (!event_type || !ALLOWED_EVENT_TYPES.has(event_type)) {
-    return NextResponse.json(
-      { error: 'Invalid event_type' },
-      { status: 400, headers: corsHeaders }
-    );
+  if (
+    !UUID_RE.test(session_id || '') ||
+    !Number.isInteger(active_seconds) ||
+    active_seconds < 0 ||
+    active_seconds > MAX_SECONDS
+  ) {
+    return new NextResponse(null, { status: 400, headers: corsHeaders });
   }
 
   const trackingData = decodeTrackingData(t);
-  if (!trackingData || !trackingData.tid || !trackingData.cid || !trackingData.email) {
-    return NextResponse.json(
-      { error: 'Invalid tracking token' },
-      { status: 400, headers: corsHeaders }
-    );
+  if (!trackingData?.tid || !trackingData?.cid || !trackingData?.email) {
+    return new NextResponse(null, { status: 400, headers: corsHeaders });
   }
 
-  // Extract device info (best effort, viewer comes from the browser)
-  const userAgent = request.headers.get('user-agent') || '';
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '';
+  const email = String(trackingData.email).trim();
+  const personId = await resolvePersonId(email);
 
-  let device = 'Unknown';
-  if (/mobile|iphone|android/i.test(userAgent)) device = 'Mobile';
-  else if (/ipad|tablet/i.test(userAgent)) device = 'Tablet';
-  else if (/mac|windows|linux/i.test(userAgent)) device = 'Computer';
-
-  const eventFields = {
-    'Event ID': `engage-${trackingData.tid}-${Date.now()}`,
+  const fields = {
+    'Event ID': `hb-${session_id}`,
+    'Session ID': session_id,
+    'Event Type': 'Room Heartbeat',
+    'Active Seconds': active_seconds,
+    Timestamp: new Date().toISOString(), // = last heartbeat received
     'Tracking ID': trackingData.tid,
-    'Recipient Email': trackingData.email,
-    Campaign: [trackingData.cid],
+    'Recipient Email': email,
     'Campaign ID': trackingData.cid,
-    'Event Type': event_type,
-    Timestamp: new Date().toISOString(),
-    Device: device,
-    'User Agent': userAgent.slice(0, 500),
-    'IP Address': ip,
+    Campaign: [trackingData.cid],
   };
+  // Person link is what feeds the Total/Max Active Seconds rollups on People
+  if (personId) fields.Person = [personId];
 
-  // Attach artwork info when relevant (Artwork View, Inquire Click)
-  if (artwork_id) eventFields['Artwork ID'] = String(artwork_id).slice(0, 50);
-  if (artwork_title) eventFields['Artwork Title'] = String(artwork_title).slice(0, 200);
-
-  // Fire and forget. We always return 204 quickly so sendBeacon doesn't block
-  // navigation in the browser. If logging fails, we log to console only.
-  logEmailEvent(eventFields).catch((err) =>
-    console.error('Failed to log engagement event:', err)
-  );
+  try {
+    const res = await fetch(
+      `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${encodeURIComponent('Email Events')}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${process.env.AIRTABLE_PAT}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          performUpsert: { fieldsToMergeOn: ['Session ID'] },
+          typecast: true, // creates the "Room Heartbeat" option on first use
+          records: [{ fields }],
+        }),
+      }
+    );
+    if (!res.ok) console.error('Heartbeat upsert failed:', res.status, await res.text());
+  } catch (err) {
+    console.error('Heartbeat upsert error:', err);
+  }
 
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
