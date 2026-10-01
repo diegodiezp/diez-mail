@@ -13,6 +13,7 @@ const ALLOWED_EVENT_TYPES = new Set([
   'Lightbox Open',
   'WhatsApp Click',
   'PDF Download',
+  'Related Room Click',
 ]);
 
 const corsHeaders = {
