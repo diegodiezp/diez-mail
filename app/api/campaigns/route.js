@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getCampaigns, getCampaign, getEventsForCampaign, getPeople } from '@/lib/airtable';
+import { getCampaigns, getCampaign, getEventsForCampaign, getPeople, normEmail } from '@/lib/airtable';
+import { filterBotNoise } from '@/lib/botDetection';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,17 +13,21 @@ export async function GET(request) {
       // Fetch campaign record + events + people in parallel.
       // People is needed to resolve real names in the recipients table
       // (events only store the email).
-      const [campaign, events, people] = await Promise.all([
+      const [campaign, rawEvents, people] = await Promise.all([
         getCampaign(campaignId),
         getEventsForCampaign(campaignId),
         getPeople({ fields: ['First Name', 'Last Name', 'Email'] }),
       ]);
 
-      // email (lowercase) → "First Last"
+      // Opens/clicks from mail security scanners are left out of the stats,
+      // the recipient table and the charts (see lib/botDetection.js).
+      const { events } = filterBotNoise(rawEvents);
+
+      // email (normalized) → "First Last"
       const nameByEmail = {};
       for (const p of people) {
         if (p.Email) {
-          nameByEmail[p.Email.toLowerCase()] =
+          nameByEmail[normEmail(p.Email)] =
             [p['First Name'], p['Last Name']].filter(Boolean).join(' ').trim();
         }
       }
@@ -30,13 +35,13 @@ export async function GET(request) {
       // Aggregate stats per recipient
       const recipients = {};
       for (const event of events) {
-        const email = event['Recipient Email'];
+        const email = normEmail(event['Recipient Email']);
         if (!email) continue;
 
         if (!recipients[email]) {
           recipients[email] = {
             email,
-            name: nameByEmail[email.toLowerCase()] || email,
+            name: nameByEmail[email] || email,
             personId: null,
             sent: false,
             opens: 0,
@@ -108,7 +113,7 @@ export async function GET(request) {
 
     // ── All campaigns list ────────────────────────────────────────────────────
     const campaigns = await getCampaigns();
-    const allEvents = await getEventsForCampaign(null);
+    const { events: allEvents } = filterBotNoise(await getEventsForCampaign(null));
 
     const eventsByCampaign = {};
     for (const event of allEvents) {
@@ -124,7 +129,7 @@ export async function GET(request) {
       const events = eventsByCampaign[c.id] || [];
       const emails = {};
       for (const e of events) {
-        const em = e['Recipient Email'];
+        const em = normEmail(e['Recipient Email']);
         if (!em) continue;
         if (!emails[em]) emails[em] = { sent: false, opened: false, clicked: false };
         if (e['Event Type'] === 'Sent') emails[em].sent = true;

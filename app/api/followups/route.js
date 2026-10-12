@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getEventsForCampaign, getPeople, getCampaigns } from '@/lib/airtable';
+import { getEventsForCampaign, getPeople, getCampaigns, normEmail } from '@/lib/airtable';
+import { filterBotNoise } from '@/lib/botDetection';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,15 +27,19 @@ function strongestSignal(events) {
 
 export async function GET() {
   try {
-    const [events, people, campaigns] = await Promise.all([
+    const [rawEvents, people, campaigns] = await Promise.all([
       getEventsForCampaign(null),
       getPeople(),
       getCampaigns(),
     ]);
 
+    // Scanner opens/clicks (corporate mail security following every link
+    // seconds after delivery) would otherwise put press inboxes at the top.
+    const { events } = filterBotNoise(rawEvents);
+
     const personByEmail = new Map();
     for (const p of people) {
-      if (p.Email) personByEmail.set(p.Email, p);
+      if (p.Email) personByEmail.set(normEmail(p.Email), p);
     }
 
     const campaignById = new Map();
@@ -45,7 +50,7 @@ export async function GET() {
     // (the text field added for reliable filtering) - either works here.
     const groups = new Map();
     for (const event of events) {
-      const email = event['Recipient Email'];
+      const email = normEmail(event['Recipient Email']);
       const campaignId = event['Campaign ID'] || event.Campaign?.[0];
       if (!email || !campaignId) continue;
 
@@ -79,7 +84,7 @@ export async function GET() {
       const campaign = campaignById.get(campaignId);
 
       followups.push({
-        email,
+        email: String(person.Email).trim(),
         personId: person.id,
         name: `${person['First Name'] || ''} ${person['Last Name'] || ''}`.trim() || email,
         campaignId,

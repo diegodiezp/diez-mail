@@ -61,8 +61,13 @@ if (pathname.startsWith('/api/cron')) {
   return NextResponse.next();
 }
 
-// Public: newsletter form + API
-if (pathname === '/diez-newsletter.html' || pathname.startsWith('/api/newsletter')) {
+// Public: newsletter form + API. Both spellings are public on purpose: QR
+// codes and links to either must never land on the login screen.
+if (
+  pathname === '/diez-newsletter.html' ||
+  pathname === '/dieznewsletter.html' ||
+  pathname.startsWith('/api/newsletter')
+) {
   return NextResponse.next();
 }
 

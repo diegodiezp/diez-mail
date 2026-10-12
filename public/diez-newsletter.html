@@ -165,6 +165,14 @@
 
     .back:hover{color:var(--black)}
 
+    /* Honeypot: off-screen, not display:none — some bots skip hidden fields
+       but still autofill anything merely positioned out of view. */
+    .hp-field{
+      position:absolute;
+      left:-9999px;
+      top:-9999px;
+    }
+
     /* ── Mobile ──────────────────────────────────────────────────────────── */
     @media(max-width:480px){
       body{
@@ -233,6 +241,11 @@
         <textarea id="interest" placeholder="Artists, themes, or anything you'd like us to know"></textarea>
       </div>
 
+      <div class="field hp-field" aria-hidden="true">
+        <label for="website">Website</label>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+      </div>
+
       <div class="submit-row">
         <button id="submitBtn" type="button" onclick="handleSubmit()">Subscribe</button>
         <div class="status" id="status"></div>
@@ -262,7 +275,8 @@
         surname: document.getElementById('surname').value.trim(),
         phone: document.getElementById('phone').value.trim(),
         city: document.getElementById('city').value.trim(),
-        interest: document.getElementById('interest').value.trim()
+        interest: document.getElementById('interest').value.trim(),
+        website: document.getElementById('website').value.trim()
       };
       fetch('/api/newsletter', {
         method: 'POST',

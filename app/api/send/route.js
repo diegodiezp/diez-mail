@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createCampaign, updateCampaign, getCampaign, getAlreadySentEmails, getSuppressedEmails, createRecords } from '@/lib/airtable';
+import { createCampaign, updateCampaign, getCampaign, getAlreadySentEmails, getSuppressedEmails, createRecords, normEmail } from '@/lib/airtable';
 import { sendCampaign } from '@/lib/resend';
 
 export const dynamic = 'force-dynamic';
@@ -82,7 +82,7 @@ export async function POST(request) {
 
       // Filter out people who already received this campaign
       const alreadySent = await getAlreadySentEmails(existingCampaignId);
-      actualRecipients = recipients.filter((r) => !alreadySent.has(r.email));
+      actualRecipients = recipients.filter((r) => !alreadySent.has(normEmail(r.email)));
 
       if (actualRecipients.length === 0) {
         return NextResponse.json(
@@ -113,8 +113,8 @@ export async function POST(request) {
     // from an earlier fetch, so this has to be re-checked server-side against
     // current Airtable state rather than trusted from the request body.
     const suppressedEmails = await getSuppressedEmails(actualRecipients.map((r) => r.id));
-    const suppressedCount = actualRecipients.filter((r) => suppressedEmails.has(r.email)).length;
-    actualRecipients = actualRecipients.filter((r) => !suppressedEmails.has(r.email));
+    const suppressedCount = actualRecipients.filter((r) => suppressedEmails.has(normEmail(r.email))).length;
+    actualRecipients = actualRecipients.filter((r) => !suppressedEmails.has(normEmail(r.email)));
 
     if (actualRecipients.length === 0) {
       return NextResponse.json(

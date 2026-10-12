@@ -443,7 +443,9 @@ function NewCampaignContent() {
         customBodies: finalCustomBodies,
         cc: cc.trim() || undefined,
         bcc: bcc.trim() || undefined,
-        ...(scheduledFor && { scheduledFor }),
+        // datetime-local has no timezone: convert the browser's local time to
+        // an absolute UTC instant so Airtable and the scheduler agree on it.
+        ...(scheduledFor && { scheduledFor: new Date(scheduledFor).toISOString() }),
       };
 
       if (existingCampaignId) {
@@ -651,14 +653,21 @@ function NewCampaignContent() {
               <div className="border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">
                 <strong>{recipientList.length} recipients exceeds the direct-send limit
                 of {DIRECT_SEND_LIMIT}.</strong> The send may time out partway through.
-                Go back and use the Schedule option instead; scheduled campaigns are
-                sent by the background process without this limit.
+                Go back and use the Schedule option instead (even a few minutes from now):
+                scheduled campaigns go out in batches every 15 minutes until everyone has it.
               </div>
             )}
             {scheduledFor && (cc.trim() || bcc.trim()) && (
               <div className="border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">
                 Heads up: Cc/Bcc are not carried into scheduled sends yet. Send now if you
                 need the copies to go out.
+              </div>
+            )}
+            {scheduledFor && editedCount > 0 && (
+              <div className="border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">
+                Heads up: the {editedCount} personalised email{editedCount > 1 ? 's' : ''} you
+                edited will go out with the standard text, because scheduled sends only keep the
+                template. Send now to keep the edits.
               </div>
             )}
             {sendResult && !sendResult.success && (
