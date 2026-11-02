@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline · Diez Mail</title>
+<style>
+  @font-face { font-family: Replica; src: url(/fonts/Replica_Regular.woff2) format('woff2'); }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: Replica, system-ui, sans-serif; background: #f7f6f3; color: #171717;
+         display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; }
+  h1 { font-size: 20px; font-weight: 400; margin: 0 0 8px; }
+  p { font-size: 14px; color: #6f6c66; margin: 0 0 20px; }
+  button { font: inherit; font-size: 14px; background: #171717; color: #fff; border: 0; padding: 10px 18px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <div>
+    <h1>No connection</h1>
+    <p>Diez Mail needs the internet to load your data.</p>
+    <button onclick="location.reload()">Try again</button>
+  </div>
+</body>
+</html>

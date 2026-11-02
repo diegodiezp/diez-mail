@@ -1,413 +1,299 @@
 'use client';
+// Today: the first screen of 2.0. Who did something worth answering, what
+// is due, and (when a fair is on) the booth leads. Every card can be
+// answered, marked done or snoozed without leaving the page.
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import ActivityFeed from '@/components/ActivityFeed';
+import PushToggle from '@/components/PushToggle';
+import { PageHeader, Segmented, Avatar, Dot, EmptyState, SkeletonRows, ArtworkThumb, Icon } from '@/components/ui';
+import { signalOf, timeAgo, dueLabel, duration } from '@/lib/format';
 
-// ── Client-side cache for closed days ────────────────────────────────────
-// Los días ya pasados son inmutables (un evento nuevo siempre tiene
-// timestamp de ahora), así que los guardamos en localStorage y solo
-// pedimos a la API lo ocurrido desde el último día cerrado.
-const CACHE_KEY = 'diez-activity-v1';
-const CACHE_MAX_ITEMS = 1000;
-
-function startOfTodayISO() {
-  const n = new Date();
-  return new Date(n.getFullYear(), n.getMonth(), n.getDate()).toISOString();
+function todayTitle() {
+  return new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
-function readCache() {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.items)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(items, lastClosedDay) {
-  try {
-    localStorage.setItem(
-      CACHE_KEY,
-      JSON.stringify({ items: items.slice(0, CACHE_MAX_ITEMS), lastClosedDay })
-    );
-  } catch {
-    // localStorage lleno o bloqueado: el feed sigue funcionando sin caché
-  }
-}
-
-// Merge con deduplicación por id de evento, ordenado desc por timestamp
-function mergeFeeds(fresh, cached) {
-  const seen = new Set();
-  const merged = [];
-  for (const item of [...fresh, ...cached]) {
-    if (!item || !item.id || seen.has(item.id)) continue;
-    seen.add(item.id);
-    merged.push(item);
-  }
-  merged.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-  return merged;
-}
-
-// ── Relative time helper ──────────────────────────────────────────────────
-function timeAgo(iso) {
-  if (!iso) return '';
-  const then = new Date(iso).getTime();
-  const diff = Math.max(0, Date.now() - then);
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
-
-function fullDate(iso) {
-  if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+async function post(body) {
+  const res = await fetch('/api/today/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Request failed');
+  window.dispatchEvent(new Event('diez:today-changed'));
+  return res.json();
 }
 
-// Verb phrase used in the headline (followed by the campaign name)
-function actionLabel(type) {
-  switch (type) {
-    case 'Open':              return 'opened';
-    case 'Click':             return 'clicked a link in';
-    case 'Viewing Room Open': return 'opened the viewing room of';
-    case 'Artwork View':      return 'viewed an artwork in';
-    case 'Inquire Click':     return 'inquired from';
-    default:                  return 'engaged with';
-  }
+function replyHref(s) {
+  const subject = s.campaignSubject ? `Re: ${s.campaignSubject}` : '';
+  const params = new URLSearchParams({ to: s.email });
+  if (subject) params.set('subject', subject);
+  return `/mail?${params.toString()}`;
 }
 
-// Standalone noun used in the expanded per-event list (no object follows)
-function eventNoun(type) {
-  switch (type) {
-    case 'Open':              return 'Opened';
-    case 'Click':             return 'Clicked link';
-    case 'Viewing Room Open': return 'Viewing room';
-    case 'Artwork View':      return 'Artwork view';
-    case 'Inquire Click':     return 'Inquiry';
-    default:                  return type;
-  }
-}
-
-// Short verb used in the per-type count breakdown line
-function shortLabel(type, count) {
-  switch (type) {
-    case 'Open':              return `opened ${count}`;
-    case 'Click':             return `clicked ${count}`;
-    case 'Viewing Room Open': return `viewing room ${count}`;
-    case 'Artwork View':      return `artwork views ${count}`;
-    case 'Inquire Click':     return `inquiries ${count}`;
-    default:                  return `${type.toLowerCase()} ${count}`;
-  }
-}
-
-function dotClass(type) {
-  switch (type) {
-    case 'Inquire Click':     return 'bg-gallery-success';
-    case 'Artwork View':      return 'bg-gallery-black';
-    case 'Viewing Room Open': return 'bg-gallery-black';
-    case 'Click':             return 'bg-gallery-mid';
-    default:                  return 'bg-gallery-border';
-  }
-}
-
-// Signal ranking: the headline + dot reflect the strongest action in the group
-const SIGNAL_RANK = {
-  'Inquire Click': 5,
-  'Artwork View': 4,
-  'Viewing Room Open': 3,
-  'Click': 2,
-  'Open': 1,
-};
-
-// Group feed items by calendar day for light visual separation
-function dayKey(iso) {
-  if (!iso) return 'Earlier';
-  const d = new Date(iso);
-  const now = new Date();
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startYesterday = new Date(startToday); startYesterday.setDate(startYesterday.getDate() - 1);
-  if (d >= startToday) return 'Today';
-  if (d >= startYesterday) return 'Yesterday';
-  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
-}
-
-// Collapse a day's events into one card per (who + campaign).
-// The feed arrives newest-first, so first-seen order = newest-first per group.
-function collapse(items) {
-  const groups = [];
-  const byKey = new Map();
-
-  for (const item of items) {
-    const key = `${item.who}||${item.campaign || ''}`;
-    let g = byKey.get(key);
-    if (!g) {
-      g = {
-        key,
-        who: item.who,
-        campaign: item.campaign,
-        latest: item.timestamp,
-        events: [],
-        counts: {},      // type -> count
-        artworks: new Set(),
-      };
-      byKey.set(key, g);
-      groups.push(g);
-    }
-    g.events.push(item);
-    g.counts[item.type] = (g.counts[item.type] || 0) + 1;
-    if (item.artwork) g.artworks.add(item.artwork);
-    if (new Date(item.timestamp) > new Date(g.latest)) g.latest = item.timestamp;
-  }
-
-  // Each group's events newest-first; pick the primary (highest-signal) type
-  for (const g of groups) {
-    g.events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    g.total = g.events.length;
-    g.primaryType = Object.keys(g.counts).sort(
-      (a, b) => (SIGNAL_RANK[b] || 0) - (SIGNAL_RANK[a] || 0)
-    )[0];
-    // Build the breakdown in signal order
-    g.breakdown = Object.entries(g.counts)
-      .sort((a, b) => (SIGNAL_RANK[b[0]] || 0) - (SIGNAL_RANK[a[0]] || 0))
-      .map(([type, count]) => shortLabel(type, count));
-  }
-
-  return groups;
-}
-
-function formatDueDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const startToday = new Date();
-  startToday.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((d - startToday) / 86400000);
-  if (diffDays < 0) return `Overdue · ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Tomorrow';
-  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-}
-
-function DueThisWeekCard() {
-  const [dueActions, setDueActions] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch('/api/due-actions')
-      .then((r) => r.json())
-      .then((data) => {
-        setDueActions(data.dueActions || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
-
-  if (loading || dueActions.length === 0) return null;
+function SignalCard({ s, onDone, onSnooze }) {
+  const meta = signalOf(s.signal);
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const facts = [];
+  if (s.counts.inquiries) facts.push(`${s.counts.inquiries} inquir${s.counts.inquiries > 1 ? 'ies' : 'y'}`);
+  if (s.longestVisit >= 30) facts.push(`${duration(s.roomSeconds)} in the room`);
+  if (s.counts.artworkViews) facts.push(`${s.counts.artworkViews} artwork view${s.counts.artworkViews > 1 ? 's' : ''}`);
+  if (s.counts.pdf) facts.push('PDF');
+  if (s.counts.clicks) facts.push(`${s.counts.clicks} click${s.counts.clicks > 1 ? 's' : ''}`);
+  if (s.counts.opens) facts.push(`opened ${s.counts.opens}×`);
 
   return (
-    <div className="border border-gallery-border bg-gallery-white mb-6">
-      <div className="px-4 sm:px-5 py-3 border-b border-gallery-border flex items-center justify-between">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-gallery-mid">Due this week</h2>
-        <span className="text-2xs text-gallery-light">{dueActions.length}</span>
+    <article className="card p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <Avatar name={s.name} size={40} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            {s.personId ? (
+              <Link href={`/contacts/${s.personId}`} className="text-[15px] hover:underline underline-offset-2 truncate">{s.name}</Link>
+            ) : (
+              <span className="text-[15px] truncate">{s.name}</span>
+            )}
+            {s.company && <span className="text-xs text-gallery-mid truncate">{s.company}</span>}
+            {s.pipeline && <span className="chip">{s.pipeline}</span>}
+          </div>
+          <div className="mt-1 flex items-start gap-2 text-sm">
+            <Dot step={meta.step} className="mt-1.5" />
+            <p className="text-gallery-dark leading-snug">
+              <span className={s.rank >= 5 ? 'text-gallery-accent' : ''}>{meta.noun}</span>
+              <span className="text-gallery-mid"> · {s.campaignName}</span>
+            </p>
+          </div>
+          <div className="mt-1 text-2xs text-gallery-light">
+            {timeAgo(s.lastActivity)}{facts.length > 0 && <> · {facts.join(' · ')}</>}
+          </div>
+        </div>
       </div>
-      <div>
-        {dueActions.map((item) => {
-          const overdue = item.nextActionDate && new Date(item.nextActionDate) < new Date().setHours(0, 0, 0, 0);
-          return (
-            <a
-              key={item.id}
-              href={`/contacts/${item.id}`}
-              className="flex items-center justify-between gap-3 px-4 sm:px-5 py-2.5 border-b border-gallery-border last:border-0 hover:bg-gallery-bg transition-colors"
-            >
-              <div className="min-w-0">
-                <div className="text-sm font-medium truncate">{item.name}</div>
-                {item.nextAction && (
-                  <div className="text-2xs text-gallery-mid truncate">{item.nextAction}</div>
-                )}
+
+      {s.artworks.length > 0 && (
+        <div className="mt-4 flex gap-3 overflow-x-auto no-scrollbar -mx-1 px-1">
+          {s.artworks.slice(0, 4).map((a) => (
+            <div key={a.id || a.title} className="w-[92px] shrink-0">
+              <ArtworkThumb id={a.id} title={a.title} size={92} />
+              <div className="mt-1.5 text-2xs leading-tight text-gallery-dark line-clamp-2">{a.title || 'Untitled'}</div>
+              <div className="text-2xs text-gallery-light">
+                {a.inquired ? <span className="text-gallery-accent">inquired</span> : `${a.views} view${a.views === 1 ? '' : 's'}`}
               </div>
-              <span className={`text-2xs flex-shrink-0 ${overdue ? 'text-red-600 font-medium' : 'text-gallery-light'}`}>
-                {formatDueDate(item.nextActionDate)}
-              </span>
-            </a>
-          );
-        })}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 flex items-center gap-2 flex-wrap">
+        <Link href={replyHref(s)} className="btn-primary btn-sm">
+          <Icon name="reply" size={14} /> Reply
+        </Link>
+        <button type="button" onClick={() => onDone(s)} className="btn-secondary btn-sm">
+          <Icon name="check" size={14} /> Done
+        </button>
+        <div className="relative">
+          <button type="button" onClick={() => setSnoozeOpen((o) => !o)} className="btn-ghost" disabled={!s.personId}>
+            <Icon name="clock" size={14} /> Later
+          </button>
+          {snoozeOpen && (
+            <div className="absolute z-20 left-0 top-9 card shadow-pop min-w-[160px]" onMouseLeave={() => setSnoozeOpen(false)}>
+              {[[2, 'In 2 days'], [7, 'Next week'], [21, 'In 3 weeks']].map(([d, label]) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => { setSnoozeOpen(false); onSnooze(s, d); }}
+                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-gallery-bg border-b border-gallery-border last:border-0"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+    </article>
+  );
+}
+
+function DueList({ items, onDone, onSnooze }) {
+  if (items.length === 0) {
+    return <EmptyState title="Nothing due">Next actions you set on a person appear here when their date comes up.</EmptyState>;
+  }
+  return (
+    <div>
+      {items.map((d) => (
+        <div key={d.personId} className="row items-start">
+          <Avatar name={d.name} size={32} />
+          <div className="min-w-0 flex-1">
+            <Link href={`/contacts/${d.personId}`} className="text-sm hover:underline underline-offset-2">{d.name}</Link>
+            <p className="text-xs text-gallery-dark mt-0.5 whitespace-pre-wrap break-words">{d.action}</p>
+            <div className={`text-2xs mt-1 ${d.overdue ? 'text-gallery-danger' : 'text-gallery-light'}`}>{dueLabel(d.date)}</div>
+          </div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <button type="button" onClick={() => onDone(d)} className="btn-ghost" title="Done">
+              <Icon name="check" size={14} /> Done
+            </button>
+            <button type="button" onClick={() => onSnooze(d, 3)} className="btn-ghost" title="Move 3 days">
+              +3d
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-export default function HomePage() {
-  const [feed, setFeed] = useState([]);
-  const [today, setToday] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(null);
+export default function TodayPage() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [view, setView] = useState('signals');
+  const [toast, setToast] = useState('');
 
-  useEffect(() => {
-    const cached = readCache();
-    const todayStart = startOfTodayISO();
-
-    // Solo confiamos en items cacheados de días ya cerrados
-    const cachedPast = (cached?.items || []).filter(
-      (i) => i.timestamp && i.timestamp < todayStart
-    );
-
-    // Pintamos de inmediato lo que ya tenemos (carga instantánea)
-    if (cachedPast.length) {
-      setFeed(cachedPast);
-      setLoading(false);
-    }
-
-    // Si hay caché, pedimos solo desde el último día cerrado registrado.
-    // Si no la hay (primera visita, caché borrada), pedimos todo.
-    const after = cached?.lastClosedDay || null;
-    const url = after
-      ? `/api/activity?limit=500&after=${encodeURIComponent(after)}`
-      : '/api/activity?limit=500';
-
-    fetch(url)
+  const load = useCallback(() => {
+    fetch('/api/today')
       .then((r) => r.json())
-      .then((data) => {
-        const fresh = data.feed || [];
-        const merged = mergeFeeds(fresh, cachedPast);
-        setFeed(merged);
-        setToday(data.today != null ? data.today : null);
-        setLoading(false);
-
-        // Persistimos los días cerrados y movemos el corte a hoy
-        writeCache(
-          merged.filter((i) => i.timestamp && i.timestamp < todayStart),
-          todayStart
-        );
+      .then((d) => {
+        if (d.error) throw new Error(d.error);
+        setData(d);
+        setError('');
       })
-      .catch(() => setLoading(false));
+      .catch((e) => setError(e.message));
   }, []);
 
-  // Build ordered day groups preserving feed order (already newest-first),
-  // then collapse each day's items into one card per who+campaign.
-  const dayGroups = [];
-  let current = null;
-  for (const item of feed) {
-    const k = dayKey(item.timestamp);
-    if (!current || current.key !== k) {
-      current = { key: k, items: [] };
-      dayGroups.push(current);
-    }
-    current.items.push(item);
-  }
-  for (const dg of dayGroups) {
-    dg.cards = collapse(dg.items);
-  }
+  useEffect(() => { load(); }, [load]);
+
+  const flash = (m) => {
+    setToast(m);
+    setTimeout(() => setToast(''), 2500);
+  };
+
+  const removeSignal = (key) => setData((d) => ({ ...d, signals: d.signals.filter((x) => x.key !== key) }));
+  const removeDue = (id) => setData((d) => ({ ...d, due: d.due.filter((x) => x.personId !== id) }));
+
+  const onDone = async (s) => {
+    removeSignal(s.key);
+    try { await post({ action: 'done', email: s.email, campaignId: s.campaignId }); flash('Marked as followed up'); }
+    catch (e) { flash(e.message); load(); }
+  };
+  const onSnooze = async (s, days) => {
+    removeSignal(s.key);
+    try {
+      await post({ action: 'snooze', email: s.email, campaignId: s.campaignId, personId: s.personId, days, label: s.campaignName });
+      flash(`Back on Today ${days === 7 ? 'next week' : `in ${days} days`}`);
+      load();
+    } catch (e) { flash(e.message); load(); }
+  };
+  const onDueDone = async (d) => {
+    removeDue(d.personId);
+    try { await post({ action: 'dueDone', personId: d.personId }); flash('Done, saved in their notes'); }
+    catch (e) { flash(e.message); load(); }
+  };
+  const onDueSnooze = async (d, days) => {
+    try { await post({ action: 'dueSnooze', personId: d.personId, days }); flash(`Moved ${days} days`); load(); }
+    catch (e) { flash(e.message); }
+  };
+
+  const hot = useMemo(() => (data?.signals || []).filter((s) => s.rank >= 4), [data]);
+  const warm = useMemo(() => (data?.signals || []).filter((s) => s.rank < 4), [data]);
+  const urgentDue = (data?.due || []).filter((d) => d.overdue || d.today).length;
 
   return (
     <div>
-      <div className="mb-6 flex items-baseline justify-between">
-        <div>
-          <h1 className="font-serif italic text-3xl mb-1">Activity</h1>
-          <p className="text-sm text-gallery-mid">Latest engagement across all campaigns</p>
-        </div>
-        {today != null && (
-          <div className="text-right">
-            <div className="text-2xl font-medium tabular-nums leading-none">{today.toLocaleString()}</div>
-            <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mt-1">
-              move{today !== 1 ? 's' : ''} today
-            </div>
-          </div>
-        )}
+      <PageHeader
+        eyebrow={todayTitle()}
+        title="Today"
+        sub={data ? summaryLine(data) : ' '}
+        actions={<PushToggle />}
+      />
+
+      {data?.fair?.count > 0 && (
+        <Link href="/fair" className="card flex items-center gap-3 px-4 sm:px-5 py-3 mb-5 hover:border-gallery-black transition-colors">
+          <Icon name="fair" size={18} />
+          <span className="text-sm flex-1">
+            <span className="num">{data.fair.count}</span> booth lead{data.fair.count > 1 ? 's' : ''} this week
+            {data.fair.latest.length > 0 && <span className="text-gallery-mid"> · {data.fair.latest.join(', ')}</span>}
+          </span>
+          <span className="text-xs text-gallery-mid">Fair mode</span>
+          <Icon name="arrow" size={14} className="text-gallery-mid" />
+        </Link>
+      )}
+
+      <div className="mb-5 lg:hidden">
+        <Segmented
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'signals', label: 'Signals', count: data?.signals?.length || 0 },
+            { value: 'due', label: 'Due', count: urgentDue },
+            { value: 'activity', label: 'Activity' },
+          ]}
+        />
       </div>
 
-      <DueThisWeekCard />
+      {error && <div className="notice-danger mb-5">Could not load Today: {error}</div>}
 
-      <div className="border border-gallery-border bg-gallery-white">
-        {loading ? (
-          <div className="text-center py-16 text-gallery-light text-sm">Loading activity...</div>
-        ) : feed.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="font-serif italic text-lg text-gallery-mid mb-1">No activity yet</p>
-            <p className="text-sm text-gallery-light">Engagement will appear here as recipients open and click.</p>
-          </div>
-        ) : (
-          dayGroups.map((group) => (
-            <div key={group.key}>
-              <div className="px-4 sm:px-5 py-2 bg-gallery-bg border-b border-gallery-border text-2xs font-medium uppercase tracking-wider text-gallery-mid">
-                {group.key}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Signals */}
+        <section className={`lg:col-span-2 space-y-6 ${view === 'signals' ? '' : 'hidden lg:block'}`}>
+          {!data && !error && <div className="card"><SkeletonRows rows={5} /></div>}
+          {data && data.signals.length === 0 && (
+            <div className="card">
+              <EmptyState title="All caught up">
+                When someone opens, clicks, browses a viewing room or inquires, they appear here until you follow up.
+              </EmptyState>
+            </div>
+          )}
+          {hot.length > 0 && (
+            <div>
+              <h2 className="eyebrow mb-3">Act now · {hot.length}</h2>
+              <div className="space-y-3">
+                {hot.map((s) => <SignalCard key={s.key} s={s} onDone={onDone} onSnooze={onSnooze} />)}
               </div>
-              {group.cards.map((card) => {
-                const isOpen = expanded === card.key;
-                const multi = card.total > 1;
-                const artwork = card.artworks.size === 1 ? [...card.artworks][0] : null;
-                return (
-                  <div key={card.key} className="border-b border-gallery-border last:border-0">
-                    <div
-                      className={`flex items-start gap-3 px-4 sm:px-5 py-3 transition-colors ${
-                        multi ? 'cursor-pointer hover:bg-gallery-bg' : ''
-                      }`}
-                      onClick={() => multi && setExpanded(isOpen ? null : card.key)}
-                    >
-                      <span className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${dotClass(card.primaryType)}`} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm leading-snug">
-                          <span className="font-medium">{card.who}</span>{' '}
-                          <span className="text-gallery-mid">{actionLabel(card.primaryType)}</span>{' '}
-                          {card.campaign
-                            ? <span className="font-medium">{card.campaign}</span>
-                            : <span className="text-gallery-mid italic">a viewing room</span>}
-                          {artwork && (
-                            <span className="text-gallery-mid"> {'\u2014'} {artwork}</span>
-                          )}
-                        </div>
-                        <div className="text-2xs text-gallery-light mt-0.5">
-                          {timeAgo(card.latest)}
-                          {multi && <span> · {card.breakdown.join(' · ')}</span>}
-                        </div>
-                      </div>
-                      {multi && (
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="text-2xs tabular-nums text-gallery-mid bg-gallery-bg border border-gallery-border px-1.5 py-0.5">
-                            {card.total}
-                          </span>
-                          <span className="text-gallery-light text-xs w-3 text-center">
-                            {isOpen ? '\u2212' : '+'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {multi && isOpen && (
-                      <div className="bg-gallery-bg px-4 sm:px-5 py-3 border-t border-gallery-border">
-                        <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-2">
-                          All {card.total} events
-                        </div>
-                        <div className="space-y-1.5">
-                          {card.events.map((ev) => (
-                            <div key={ev.id} className="flex items-center gap-3 text-2xs">
-                              <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${dotClass(ev.type)}`} />
-                              <span className="text-gallery-dark flex-shrink-0 w-24">{eventNoun(ev.type)}</span>
-                              {ev.artwork
-                                ? <span className="text-gallery-mid truncate flex-1">{ev.artwork}</span>
-                                : <span className="flex-1" />}
-                              <span className="text-gallery-light flex-shrink-0">{fullDate(ev.timestamp)}</span>
-                              {ev.device && (
-                                <span className="text-gallery-light flex-shrink-0 w-16 text-right">{ev.device}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
             </div>
-          ))
-        )}
+          )}
+          {warm.length > 0 && (
+            <div>
+              <h2 className="eyebrow mb-3">Warming up · {warm.length}</h2>
+              <div className="space-y-3">
+                {warm.map((s) => <SignalCard key={s.key} s={s} onDone={onDone} onSnooze={onSnooze} />)}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Due + activity */}
+        <aside className={`space-y-6 ${view === 'signals' ? 'hidden lg:block' : ''}`}>
+          <div className={`card ${view === 'activity' ? 'hidden lg:block' : ''}`}>
+            <div className="card-head">
+              <h2 className="eyebrow">Due</h2>
+              <span className="text-2xs text-gallery-light num">{data?.due?.length || 0}</span>
+            </div>
+            {!data ? <SkeletonRows rows={3} /> : <DueList items={data.due} onDone={onDueDone} onSnooze={onDueSnooze} />}
+          </div>
+
+          <div className={view === 'due' ? 'hidden lg:block' : ''}>
+            <h2 className="eyebrow mb-3">All activity</h2>
+            <ActivityFeed />
+          </div>
+        </aside>
       </div>
+
+      {toast && (
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-[calc(84px+env(safe-area-inset-bottom))] sm:bottom-6 z-50 bg-gallery-black text-white text-sm px-4 py-2.5 shadow-pop">
+          {toast}
+        </div>
+      )}
     </div>
   );
+}
+
+function summaryLine(d) {
+  const parts = [];
+  const hot = d.signals.filter((s) => s.rank >= 4).length;
+  if (hot) parts.push(`${hot} to act on now`);
+  const warm = d.signals.length - hot;
+  if (warm) parts.push(`${warm} warming up`);
+  const overdue = d.due.filter((x) => x.overdue).length;
+  if (overdue) parts.push(`${overdue} overdue`);
+  return parts.length ? parts.join(' · ') : 'Nothing waiting on you.';
 }

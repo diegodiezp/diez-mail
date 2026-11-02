@@ -1,3 +1,4 @@
+import { newsletterToken } from '@/lib/airtable';
 // In-memory per-IP rate limit: 3 signups per IP per hour. Resets on cold
 // start, which only ever relaxes the limit, so that's an acceptable tradeoff.
 const RATE_LIMIT_MAX_SIGNUPS = 3;
@@ -79,7 +80,7 @@ export async function POST(request) {
     {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.AIRTABLE_PAT}`,
+        'Authorization': `Bearer ${newsletterToken()}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

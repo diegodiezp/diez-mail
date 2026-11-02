@@ -2,32 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Replica, self-hosted (same files as rooms.diez.gallery) ─────────────── */
+@font-face { font-family: 'Replica'; src: url('/fonts/Replica_Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Replica'; src: url('/fonts/Replica_Italic.woff2') format('woff2'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Replica'; src: url('/fonts/Replica_Bold.woff2') format('woff2'); font-weight: 500 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Replica'; src: url('/fonts/Replica_BoldItalic.woff2') format('woff2'); font-weight: 500 700; font-style: italic; font-display: swap; }
+
 @layer base {
+  html { -webkit-text-size-adjust: 100%; }
   body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'tnum' 0;
   }
-
-  ::selection {
-    background-color: #c45a3c;
-    color: white;
-  }
+  ::selection { background-color: #c45a3c; color: white; }
+  :focus-visible { outline: 2px solid #171717; outline-offset: 2px; }
 }
 
 @layer components {
+  /* Page title: Replica regular, generous, no fake italics */
+  .page-title { @apply text-[26px] sm:text-[32px] leading-tight tracking-tight font-normal text-gallery-black; }
+  .page-sub { @apply text-sm text-gallery-mid mt-1; }
+  .eyebrow { @apply text-2xs font-medium uppercase tracking-[0.08em] text-gallery-mid; }
+  .num { font-variant-numeric: tabular-nums; }
+
   .btn-primary {
-    @apply inline-flex items-center px-4 py-2 text-sm font-medium
-      bg-gallery-black text-white rounded-none
+    @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium
+      bg-gallery-black text-white rounded-none whitespace-nowrap
       hover:bg-gallery-dark transition-colors
       disabled:opacity-40 disabled:cursor-not-allowed;
   }
-
   .btn-secondary {
-    @apply inline-flex items-center px-4 py-2 text-sm font-medium
-      border border-gallery-border text-gallery-black rounded-none
-      hover:bg-gallery-bg transition-colors
+    @apply inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium
+      border border-gallery-border bg-gallery-white text-gallery-black rounded-none whitespace-nowrap
+      hover:border-gallery-black transition-colors
       disabled:opacity-40 disabled:cursor-not-allowed;
   }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-xs
+      text-gallery-mid hover:text-gallery-black transition-colors whitespace-nowrap
+      disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-sm { @apply px-3 py-1.5 text-xs; }
 
   .input-field {
     @apply w-full px-3 py-2 text-sm border border-gallery-border
@@ -36,67 +52,66 @@
       placeholder:text-gallery-light transition-colors;
   }
 
-  .stat-card {
-    @apply bg-gallery-white border border-gallery-border p-5;
-  }
+  .card { @apply bg-gallery-white border border-gallery-border; }
+  .card-head { @apply flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-gallery-border; }
+  .row { @apply flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-gallery-border last:border-0; }
+  .row-link { @apply row hover:bg-gallery-bg transition-colors; }
 
-  .table-header {
-    @apply text-2xs font-medium uppercase tracking-wider text-gallery-mid
-      border-b border-gallery-border pb-2;
-  }
+  .stat-card { @apply bg-gallery-white border border-gallery-border p-4 sm:p-5; }
+  .table-header { @apply text-2xs font-medium uppercase tracking-wider text-gallery-mid border-b border-gallery-border pb-2; }
 
-  .badge {
-    @apply inline-flex items-center px-2 py-0.5 text-2xs font-medium tracking-wide uppercase;
+  .chip {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 text-2xs border border-gallery-border
+      text-gallery-mid bg-gallery-white whitespace-nowrap;
   }
+  .chip-on { @apply bg-gallery-black text-white border-gallery-black; }
+  .chip-accent { @apply bg-gallery-accent-light text-gallery-accent border-transparent; }
 
-  .badge-sent {
-    @apply badge bg-blue-50 text-blue-700;
-  }
+  .badge { @apply inline-flex items-center px-2 py-0.5 text-2xs font-medium tracking-wide uppercase; }
+  .badge-sent { @apply badge bg-gallery-bg text-gallery-mid; }
+  .badge-open { @apply badge bg-gallery-success-light text-gallery-success; }
+  .badge-failed { @apply badge bg-gallery-danger-light text-gallery-danger; }
+  .badge-client { @apply badge bg-gallery-accent-light text-gallery-accent; }
+  .badge-contact { @apply badge bg-gallery-bg text-gallery-mid; }
 
-  .badge-open {
-    @apply badge bg-emerald-50 text-emerald-700;
-  }
+  .notice { @apply border px-4 py-3 text-sm leading-relaxed; }
+  .notice-warn { @apply notice border-gallery-warn/30 bg-gallery-warn-light text-gallery-warn; }
+  .notice-info { @apply notice border-gallery-border bg-gallery-bg text-gallery-mid; }
+  .notice-danger { @apply notice border-gallery-danger/30 bg-gallery-danger-light text-gallery-danger; }
+  .notice-ok { @apply notice border-gallery-success/30 bg-gallery-success-light text-gallery-success; }
 
-  .badge-failed {
-    @apply badge bg-red-50 text-red-700;
-  }
-
-  .badge-client {
-    @apply badge bg-gallery-accent-light text-gallery-accent;
-  }
-
-  .badge-contact {
-    @apply badge bg-gray-100 text-gallery-mid;
+  .skeleton {
+    @apply bg-gallery-border/60;
+    background-image: linear-gradient(90deg, rgba(255,255,255,0) 0, rgba(255,255,255,0.6) 50%, rgba(255,255,255,0) 100%);
+    background-size: 400px 100%;
+    background-repeat: no-repeat;
+    animation: shimmer 1.4s linear infinite;
   }
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #d0d0d0;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #a0a0a0;
-}
+/* Scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d6d2ca; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a8a49c; }
 
-/* Textarea auto-resize helper */
-.auto-resize {
-  field-sizing: content;
-  min-height: 120px;
-}
+.auto-resize { field-sizing: content; min-height: 120px; }
 
-/* Sideways-scrolling nav on phones, without a visible scrollbar */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Room for the phone tab bar and the home indicator */
+.pb-tabbar { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+@media (min-width: 640px) { .pb-tabbar { padding-bottom: 0; } }
 
 /* iPhone zooms into any field under 16px when you tap it, and in the
    home-screen app it stays zoomed. 16px on phones avoids that. */
 @media (max-width: 639px) {
   input, select, textarea { font-size: 16px !important; }
 }
+
+/* Rich text inside the editors and previews */
+.prose-mail p { margin: 0 0 0.9em; }
+.prose-mail ul { list-style: disc; padding-left: 1.4em; margin: 0 0 0.9em; }
+.prose-mail ol { list-style: decimal; padding-left: 1.4em; margin: 0 0 0.9em; }
+.prose-mail a { text-decoration: underline; }

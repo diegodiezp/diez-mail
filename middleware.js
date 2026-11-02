@@ -90,5 +90,5 @@ if (pathname.startsWith('/api/webhooks')) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|icons|manifest.json|sw.js).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|icons|fonts|manifest.json|sw.js|offline.html).*)'],
 };

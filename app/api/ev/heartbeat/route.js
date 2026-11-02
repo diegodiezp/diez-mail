@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getPersonByEmail } from '@/lib/airtable';
 import { decodeTrackingData } from '@/lib/gmail';
+import { alertLongVisit } from '@/lib/alerts';
+import { LONG_VISIT_SECONDS } from '@/lib/model';
+
+// Sessions already announced on this instance, so a re-sent beat at the
+// threshold doesn't buzz the phone twice.
+const announced = new Set();
 
 export const dynamic = 'force-dynamic';
 
@@ -98,6 +104,18 @@ export async function POST(request) {
     if (!res.ok) console.error('Heartbeat upsert failed:', res.status, await res.text());
   } catch (err) {
     console.error('Heartbeat upsert error:', err);
+  }
+
+  // 2.0: one push per visit when it crosses the long-visit threshold. Beats
+  // arrive every ~15s with the running total, so "just crossed" is a window.
+  if (
+    active_seconds >= LONG_VISIT_SECONDS &&
+    active_seconds < LONG_VISIT_SECONDS + 30 &&
+    !announced.has(session_id)
+  ) {
+    announced.add(session_id);
+    if (announced.size > 5000) announced.clear();
+    await alertLongVisit({ email, seconds: active_seconds });
   }
 
   return new NextResponse(null, { status: 204, headers: corsHeaders });

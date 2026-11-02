@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logEmailEvent } from '@/lib/airtable';
 import { decodeTrackingData } from '@/lib/gmail';
+import { alertInquiry } from '@/lib/alerts';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,9 +89,23 @@ export async function POST(request) {
 
   // Fire and forget. We always return 204 quickly so sendBeacon doesn't block
   // navigation in the browser. If logging fails, we log to console only.
-  logEmailEvent(eventFields).catch((err) =>
+  const logged = logEmailEvent(eventFields).catch((err) =>
     console.error('Failed to log engagement event:', err)
   );
+
+  // 2.0: an inquiry is the moment to act, so it goes to Diego's phone.
+  // Awaited (with notifyAll's own ~4s bound) so the function isn't frozen
+  // before the push leaves; sendBeacon doesn't wait on this response.
+  if (event_type === 'Inquire Click' || event_type === 'WhatsApp Click') {
+    await Promise.all([
+      logged,
+      alertInquiry({
+        email: trackingData.email,
+        artworkTitle: artwork_title ? String(artwork_title).slice(0, 200) : '',
+        channel: event_type === 'WhatsApp Click' ? 'WhatsApp' : 'Inquire',
+      }),
+    ]);
+  }
 
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }

@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import {
-  base, TABLES, getPersonByEmail, getOrCreateCampaignByName, createRecords,
+  base, TABLES, getPersonByEmail, getOrCreateCampaignByName, createRecords, newsletterToken,
 } from '@/lib/airtable';
 import { sendCampaign, generateTrackingId, encodeTrackingData } from '@/lib/resend';
+import { SIGNATURE_HTML } from '@/lib/signature';
+import { alertBoothLead } from '@/lib/alerts';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,14 +64,7 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// Same signature as the campaign composer (app/campaigns/new/page.js).
-const SIGNATURE_HTML = [
-  `<div>Diego Diez</div>`,
-  `<div>Director of <a href="https://diez.gallery" style="color:#1a1a1a;text-decoration:underline;">diez</a></div>`,
-  `<div>+31 633261845</div>`,
-  `<div>+34 648872907</div>`,
-  `<div><a href="https://instagram.com/diez.gallery" style="color:#1a1a1a;text-decoration:underline;">Instagram</a></div>`,
-].join('');
+
 
 function emailBody({ firstName, roomTitle, roomUrl }) {
   const hello = firstName ? `Hello ${escapeHtml(firstName)},` : 'Hello,';
@@ -91,7 +86,7 @@ async function addToNewsletter({ email, firstName, lastName, slug }) {
   if (lastName) fields.Surname = lastName;
   const res = await fetch(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.AIRTABLE_PAT}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${newsletterToken()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ records: [{ fields }], typecast: true }),
   });
   if (!res.ok) throw new Error(`newsletter ${res.status}: ${await res.text()}`);
@@ -218,6 +213,8 @@ export async function POST(request) {
           .catch((err) => console.error('[lead] newsletter signup failed:', err.message))
       );
     }
+    // Push to Diego's phone (bounded to a few seconds, never throws)
+    followUps.push(alertBoothLead({ name, email, room: roomTitle }));
     await Promise.all(followUps);
 
     const t = encodeTrackingData(trackingId, campaign.id, email);

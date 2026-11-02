@@ -3,13 +3,7 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
-const SIGNATURE_HTML = [
-  `<div>Diego Diez</div>`,
-  `<div>Director of <a href="https://diez.gallery" style="color:#1a1a1a;text-decoration:underline;">diez</a></div>`,
-  `<div>+31 633261845</div>`,
-  `<div>+34 648872907</div>`,
-  `<div><a href="https://instagram.com/diez.gallery" style="color:#1a1a1a;text-decoration:underline;">Instagram</a></div>`,
-].join('');
+import { SIGNATURE_HTML } from '@/lib/signature';
 
 // Work out the recipients for a reply.
 // - "to" is the original sender (or, if we sent the last message, the first To recipient).
@@ -229,6 +223,9 @@ function MailPageContent() {
     if (to) {
       setComposeMode('new');
       setComposeTo(to);
+      // 2.0: Today's "Reply" also passes the campaign subject
+      const subject = searchParams.get('subject');
+      if (subject) setComposeSubject(subject);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

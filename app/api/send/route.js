@@ -3,7 +3,10 @@ import { createCampaign, updateCampaign, getCampaign, getAlreadySentEmails, getS
 import { sendCampaign } from '@/lib/resend';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300; // 5 min: allows campaigns up to ~180 recipients
+// 2.0: the composer sends in batches of SEND_BATCH_SIZE (see
+// app/campaigns/new), each a separate request that adds to the same
+// campaign, so no single request runs long regardless of the plan's limit.
+export const maxDuration = 60;
 
 // Shape a sendCampaign result into an Email Events record. Reused by the
 // logEvents closure below, which sendCampaign calls every 10 sends so
@@ -38,7 +41,6 @@ export async function POST(request) {
       pdfLink,
       customBodies,      // Optional: { [personId]: "edited HTML" }
       campaignId: existingCampaignId,  // Optional: send to an existing campaign
-      scheduledFor,      // Optional: ISO date string — schedule instead of send now
       cc,                // Optional: texto libre o array, se aplica a cada correo
       bcc,               // Optional: texto libre o array, se aplica a cada correo
     } = body;
@@ -48,21 +50,6 @@ export async function POST(request) {
         { error: 'Missing required fields: subject, bodyTemplate, recipients' },
         { status: 400 }
       );
-    }
-
-    // ── Scheduled send: save campaign and bail out ────────────────────────────
-    if (scheduledFor) {
-      const campaignFields = {
-        Name: campaignName || subject,
-        Subject: subject,
-        'Body Template': bodyTemplate,
-        Status: 'Scheduled',
-        'Scheduled For': scheduledFor,
-        ...(pdfLink && { 'PDF Link': pdfLink }),
-        People: recipients.filter((r) => r.id).map((r) => r.id),
-      };
-      const campaign = await createCampaign(campaignFields);
-      return NextResponse.json({ campaignId: campaign.id, scheduled: true, scheduledFor });
     }
 
     let campaign;
@@ -136,7 +123,7 @@ export async function POST(request) {
       customBodies: customBodies || null,
       cc: cc || null,
       bcc: bcc || null,
-      delayMs: 1500,
+      delayMs: 700, // Resend allows 2 req/s; 0.7s keeps a safe margin
       logEvents: (batch) =>
         createRecords('Email Events', batch.map((r) => buildEventFields(r, campaign.id))),
     });
