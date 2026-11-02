@@ -11,18 +11,20 @@ export const metadata = {
   title: 'Diez Mail',
   description: 'Email campaigns for Diez Gallery',
   manifest: '/manifest.json',
-  themeColor: '#1a1a1a',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'Diez Mail',
   },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+};
+
+// Next 14 ignores viewport/themeColor inside metadata; they live here.
+// Pinch zoom stays allowed, in the browser and in the home-screen app.
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#1a1a1a',
 };
 
 export default function RootLayout({ children }) {

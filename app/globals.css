@@ -90,3 +90,13 @@
   field-sizing: content;
   min-height: 120px;
 }
+
+/* Sideways-scrolling nav on phones, without a visible scrollbar */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* iPhone zooms into any field under 16px when you tap it, and in the
+   home-screen app it stays zoomed. 16px on phones avoids that. */
+@media (max-width: 639px) {
+  input, select, textarea { font-size: 16px !important; }
+}

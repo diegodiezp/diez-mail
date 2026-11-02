@@ -826,8 +826,8 @@ function NewCampaignContent() {
   // ── Compose — Arternal-style ──────────────────────────────────────────────
   return (
     <div
-      className="flex flex-col sm:flex-row"
-      style={{ height: 'calc(100vh - 64px)', overflow: 'hidden', margin: '-24px -24px 0' }}
+      className="flex flex-col sm:flex-row -mx-4 -mt-6 sm:-mx-6 sm:-mt-6 h-[calc(100dvh-86px)] sm:h-[calc(100vh-64px)]"
+      style={{ overflow: 'hidden' }}
     >
       {/* ── LEFT: Contacts panel ──────────────────────────────────────────── */}
       <div
