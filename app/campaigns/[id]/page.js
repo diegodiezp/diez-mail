@@ -1,335 +1,164 @@
 'use client';
+// Campaign report, 2.0: the full funnel from email to inquiry, counted in
+// people and cleaned of scanners, plus who did what and the quick actions
+// that follow from it (follow up, resend to non-openers, duplicate).
 
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import {
-  computeChartData,
-  OpensOverTime,
-  DeviceBreakdown,
-  TopLinks,
-  EngagementSummary,
-} from '@/components/CampaignCharts';
+import Link from 'next/link';
+import { computeChartData, OpensOverTime, DeviceBreakdown, TopLinks } from '@/components/CampaignCharts';
+import { Avatar, BackLink, EmptyState, Segmented, SkeletonRows, Icon } from '@/components/ui';
+import { duration, fullDate, timeAgo } from '@/lib/format';
 
-function formatDate(iso) {
-  if (!iso) return '-';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function TimeAgo({ date }) {
-  if (!date) return <span className="text-gallery-light">-</span>;
-  const now = new Date();
-  const d = new Date(date);
-  const diffMs = now - d;
-  const diffMin = Math.floor(diffMs / 60000);
-  const diffHr = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHr / 24);
-
-  let text;
-  if (diffMin < 1) text = 'Just now';
-  else if (diffMin < 60) text = `${diffMin}m ago`;
-  else if (diffHr < 24) text = `${diffHr}h ago`;
-  else if (diffDay < 7) text = `${diffDay}d ago`;
-  else text = formatDate(date);
-
-  return <span title={formatDate(date)}>{text}</span>;
-}
-
-export default function CampaignDetailPage() {
-  const params = useParams();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [expandedEmail, setExpandedEmail] = useState(null);
-  const [recipientFilter, setRecipientFilter] = useState('all');
-
-  useEffect(() => {
-    if (!params.id) return;
-
-    setLoading(true);
-    setData(null);
-
-    fetch(`/api/campaigns?id=${params.id}`)
-      .then(async (r) => {
-        const json = await r.json();
-        if (!r.ok) throw new Error(json.error || 'Failed to load campaign');
-        return json;
-      })
-      .then((d) => {
-        setData(d);
-        setLoading(false);
-      })
-      .catch(() => {
-        setData(null);
-        setLoading(false);
-      });
-  }, [params.id]);
-
-
-  const chartData = useMemo(() => {
-    if (!data) return null;
-    return computeChartData(data.events, data.recipients);
-  }, [data]);
-
-  if (loading) {
-    return (
-      <div className="text-center py-20 text-gallery-light text-sm">
-        Loading campaign data...
-      </div>
-    );
-  }
-
-  if (!data) {
-    return (
-      <div className="text-center py-20 text-gallery-light text-sm">
-        Campaign not found.
-      </div>
-    );
-  }
-
-    const { campaign, stats, recipients, events } = data;
-
-  if (!stats || !recipients || !events) {
-    return (
-      <div className="text-center py-20 text-gallery-light text-sm">
-        Campaign not found.
-      </div>
-    );
-  }
-
-
-  const getRecipientEvents = (email) =>
-    events
-      .filter((e) => e['Recipient Email'] === email)
-      .sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp));
-
+function FunnelRow({ label, value, of, note, accent }) {
+  const pct = of > 0 ? (value / of) * 100 : 0;
   return (
-    <div>
-      <a
-        href="/"
-        className="text-2xs text-gallery-mid hover:text-gallery-black transition-colors mb-4 inline-block"
-      >
-        ← Back to Campaigns
-      </a>
-
-      {/* ── Campaign header with real name ───────────────────────────────── */}
-      <div className="flex items-start justify-between mb-8 gap-4">
-        <div>
-          <h1 className="font-serif italic text-3xl mb-1">
-            {campaign?.name || 'Campaign Detail'}
-          </h1>
-          {campaign?.subject && (
-            <p className="text-sm text-gallery-mid">{campaign.subject}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-3 flex-shrink-0 mt-1">
-          <a
-            href={`/campaigns/new?followup=${params.id}`}
-            className="btn-secondary text-xs py-1.5 px-4"
-          >
-            Follow-up
-          </a>
-          {(campaign?.status === 'Sent' || campaign?.status === 'Partial') && (
-            <a
-              href={`/campaigns/new?campaign=${params.id}`}
-              className="btn-secondary text-xs py-1.5 px-4"
-            >
-              + Add Recipients
-            </a>
-          )}
-          {campaign?.status && (
-            <span
-              className={`${
-                campaign.status === 'Sent'
-                  ? 'badge-sent'
-                  : campaign.status === 'Sending'
-                    ? 'badge bg-yellow-50 text-yellow-700'
-                    : campaign.status === 'Partial'
-                      ? 'badge bg-orange-50 text-orange-700'
-                      : 'badge bg-gray-50 text-gallery-mid'
-              }`}
-            >
-              {campaign.status}
-            </span>
-          )}
-        </div>
+    <div className="grid grid-cols-[110px_1fr_auto] sm:grid-cols-[160px_1fr_auto] items-center gap-3 py-2">
+      <div className="text-sm">{label}</div>
+      <div className="h-2 bg-gallery-bg">
+        <div className={`h-2 ${accent ? 'bg-gallery-accent' : 'bg-gallery-black'}`} style={{ width: `${Math.max(pct, value > 0 ? 1.5 : 0)}%` }} />
       </div>
-
-      {/* ── Stats row ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
-        <div className="stat-card">
-          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Sent</div>
-          <div className="text-2xl font-medium tabular-nums">{stats.sent}</div>
-        </div>
-        <div className="stat-card">
-          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Unique Opens</div>
-          <div className="text-2xl font-medium tabular-nums">{stats.uniqueOpens}</div>
-        </div>
-        <div className="stat-card">
-          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Total Opens</div>
-          <div className="text-2xl font-medium tabular-nums">{stats.totalOpens}</div>
-        </div>
-        <div className="stat-card">
-          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Open Rate</div>
-          <div className="text-2xl font-medium tabular-nums">{stats.openRate}%</div>
-        </div>
-        <div className="stat-card">
-          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">PDF Clicks</div>
-          <div className="text-2xl font-medium tabular-nums">{stats.uniqueClicks || 0}</div>
-        </div>
-        <div className="stat-card">
-          <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1">Click Rate</div>
-          <div className="text-2xl font-medium tabular-nums">{stats.clickRate || 0}%</div>
-        </div>
-      </div>
-
-      {/* ── Charts ───────────────────────────────────────────────────────── */}
-      {chartData && (
-        <div className="mb-8 space-y-3">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-            <div className="lg:col-span-2">
-              <OpensOverTime data={chartData.hourlyOpens} />
-            </div>
-            <div>
-              <EngagementSummary stats={stats} />
-            </div>
-          </div>
-          {(chartData.hasDeviceData || chartData.hasClickData) && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <DeviceBreakdown data={chartData.devices} />
-              <TopLinks data={chartData.topLinks} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Recipients table ─────────────────────────────────────────────── */}
-      <div className="overflow-x-auto border border-gallery-border bg-gallery-white">
-        <div className="px-5 py-3 border-b border-gallery-border flex items-center justify-between gap-4">
-          <span className="text-2xs font-medium uppercase tracking-wider text-gallery-mid">
-            Recipients ({recipients.length})
-          </span>
-          <div className="flex gap-1">
-            {[
-              { key: 'all', label: 'All' },
-              { key: 'opened', label: 'Opened' },
-              { key: 'not-opened', label: 'Not opened' },
-              { key: 'clicked', label: 'Clicked' },
-            ].map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setRecipientFilter(f.key)}
-                className={`text-2xs px-2.5 py-1 transition-colors ${
-                  recipientFilter === f.key
-                    ? 'bg-gallery-black text-white'
-                    : 'border border-gallery-border text-gallery-mid hover:text-gallery-black'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {recipients
-          .filter((r) => {
-            if (recipientFilter === 'opened') return r.opens > 0;
-            if (recipientFilter === 'not-opened') return r.opens === 0;
-            if (recipientFilter === 'clicked') return r.clicks > 0;
-            return true;
-          })
-          .map((r) => (
-          <div key={r.email} className="border-b border-gallery-border last:border-0">
-            <div
-              className="flex items-center gap-4 px-5 py-3 cursor-pointer hover:bg-gallery-bg transition-colors"
-              onClick={() => setExpandedEmail(expandedEmail === r.email ? null : r.email)}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{r.name}</div>
-                <div className="text-2xs text-gallery-mid truncate">{r.email}</div>
-              </div>
-
-              <div className="flex-shrink-0">
-                {r.opens > 0 ? (
-                  <span className="badge-open">Opened</span>
-                ) : r.sent ? (
-                  <span className="badge-sent">Sent</span>
-                ) : (
-                  <span className="badge-failed">Failed</span>
-                )}
-              </div>
-
-              <div className="text-right w-12 flex-shrink-0">
-                <div className="text-xs sm:text-sm font-medium tabular-nums">{r.opens}</div>
-                <div className="text-2xs text-gallery-light">opens</div>
-              </div>
-
-              <div className="text-right w-12 flex-shrink-0">
-                <div className="text-xs sm:text-sm font-medium tabular-nums">{r.clicks || 0}</div>
-                <div className="text-2xs text-gallery-light">clicks</div>
-              </div>
-
-              <div className="text-right w-20 text-2xs text-gallery-mid hidden sm:block flex-shrink-0">
-                {r.devices.join(', ') || '-'}
-              </div>
-
-              <div className="text-right w-24 text-2xs text-gallery-mid hidden sm:block flex-shrink-0">
-                <TimeAgo date={r.lastOpen} />
-              </div>
-
-              <div className="text-gallery-light text-xs w-4 flex-shrink-0">
-                {expandedEmail === r.email ? '−' : '+'}
-              </div>
-            </div>
-
-            {expandedEmail === r.email && (
-              <div className="bg-gallery-bg px-5 py-4 border-t border-gallery-border">
-                <div className="text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-3">
-                  Activity Timeline
-                </div>
-                <div className="space-y-2">
-                  {getRecipientEvents(r.email).map((event, i) => (
-                    <div key={i} className="flex items-start gap-3">
-                      <div
-                        className="w-1.5 h-1.5 mt-1.5 rounded-full flex-shrink-0"
-                        style={{
-                          backgroundColor:
-                            event['Event Type'] === 'Open'
-                              ? '#3a7d44'
-                              : event['Event Type'] === 'Sent'
-                                ? '#4a90d9'
-                                : '#d44',
-                        }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm">
-                          <span className="font-medium">{event['Event Type']}</span>
-                          {event.Device && (
-                            <span className="text-gallery-mid ml-2">on {event.Device}</span>
-                          )}
-                        </div>
-                        {event['Clicked URL'] && (
-                          <div className="text-2xs text-gallery-accent mt-0.5 truncate" title={event['Clicked URL']}>
-                            {event['Clicked URL']}
-                          </div>
-                        )}
-                        <div className="text-2xs text-gallery-light">
-                          {formatDate(event.Timestamp)}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
+      <div className="text-right w-24">
+        <span className="text-sm num">{value}</span>
+        <span className="text-2xs text-gallery-light num ml-1.5">{of > 0 ? `${pct.toFixed(pct < 10 ? 1 : 0)}%` : ''}</span>
+        {note && <div className="text-2xs text-gallery-light">{note}</div>}
       </div>
     </div>
   );
 }
 
+export default function CampaignReportPage() {
+  const { id } = useParams();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState('engaged');
+  const [q, setQ] = useState('');
+
+  useEffect(() => {
+    fetch(`/api/campaigns?id=${id}`).then((r) => r.json()).then((d) => { if (d.error) throw new Error(d.error); setData(d); }).catch((e) => setError(e.message));
+  }, [id]);
+
+  const chartData = useMemo(() => (data ? computeChartData(data.events, data.recipients) : null), [data]);
+
+  const groups = useMemo(() => {
+    const r = data?.recipients || [];
+    return {
+      all: r,
+      engaged: r.filter((x) => x.opens || x.clicks || x.room || x.roomSeconds || x.inquiries),
+      room: r.filter((x) => x.room || x.roomSeconds),
+      inquired: r.filter((x) => x.inquiries),
+      unopened: r.filter((x) => x.sent && !x.opens && !x.clicks && !x.room),
+      failed: r.filter((x) => x.failed && !x.sent),
+    };
+  }, [data]);
+
+  const shown = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    const list = groups[filter] || [];
+    return term ? list.filter((x) => `${x.name} ${x.email} ${x.company}`.toLowerCase().includes(term)) : list;
+  }, [groups, filter, q]);
+
+  if (error) return (<div><BackLink href="/campaigns">Campaigns</BackLink><div className="notice-danger">{error}</div></div>);
+  if (!data) return (<div><BackLink href="/campaigns">Campaigns</BackLink><div className="skeleton h-8 w-1/2 mb-6" /><div className="card"><SkeletonRows rows={8} /></div></div>);
+
+  const { campaign, funnel, filtered } = data;
+  const removed = (filtered.bot || 0) + (filtered.scanner || 0) + (filtered.duplicate || 0);
+  const unopenedIds = groups.unopened.map((x) => x.personId).filter(Boolean);
+
+  return (
+    <div>
+      <BackLink href="/campaigns">Campaigns</BackLink>
+      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+        <div className="min-w-0">
+          <h1 className="page-title">{campaign.name}</h1>
+          <p className="page-sub">
+            {campaign.subject && <span>“{campaign.subject}”</span>}
+            {campaign.created && <span> · {fullDate(campaign.created)}</span>}
+            {campaign.status && campaign.status !== 'Sent' && <span className="text-gallery-warn"> · {campaign.status}</span>}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/campaigns/new?followup=${id}`} className="btn-primary btn-sm"><Icon name="reply" size={14} /> Follow-up</Link>
+          {unopenedIds.length > 0 && (
+            <Link href={`/campaigns/new?duplicate=${id}&people=${unopenedIds.join(',')}`} className="btn-secondary btn-sm">Resend to {unopenedIds.length} unopened</Link>
+          )}
+          <Link href={`/campaigns/new?campaign=${id}`} className="btn-secondary btn-sm">Add recipients</Link>
+          <Link href={`/campaigns/new?duplicate=${id}`} className="btn-ghost">Duplicate</Link>
+        </div>
+      </div>
+
+      {/* Funnel */}
+      <section className="card p-4 sm:p-5 mb-6">
+        <div className="flex items-baseline justify-between mb-2">
+          <h2 className="eyebrow">From email to inquiry</h2>
+          {removed > 0 && <span className="text-2xs text-gallery-light">{removed} machine events left out</span>}
+        </div>
+        <FunnelRow label="Delivered" value={funnel.sent} of={funnel.sent} note={funnel.failed ? `${funnel.failed} failed` : null} />
+        <FunnelRow label="Opened" value={funnel.opened} of={funnel.sent} note={funnel.openedRaw > funnel.opened ? `${funnel.openedRaw} incl. prefetch` : null} />
+        <FunnelRow label="Clicked" value={funnel.clicked} of={funnel.sent} />
+        <FunnelRow label="Viewing room" value={funnel.room} of={funnel.sent} />
+        <FunnelRow label="Looked at works" value={funnel.artwork} of={funnel.sent} />
+        <FunnelRow label="Inquired" value={funnel.inquired} of={funnel.sent} accent />
+        <p className="text-2xs text-gallery-light mt-3">
+          Opens are approximate everywhere: Apple Mail preloads images and some clients block them. Clicks, room visits and inquiries are reliable.
+        </p>
+      </section>
+
+      {/* Charts */}
+      {chartData && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-6">
+          <div className="lg:col-span-2"><OpensOverTime data={chartData.hourlyOpens} /></div>
+          <div className="space-y-3">
+            {chartData.hasDeviceData && <DeviceBreakdown data={chartData.devices} />}
+            {chartData.hasClickData && <TopLinks data={chartData.topLinks} />}
+          </div>
+        </div>
+      )}
+
+      {/* Recipients */}
+      <section className="card">
+        <div className="card-head flex-col sm:flex-row items-stretch sm:items-center">
+          <div className="overflow-x-auto no-scrollbar">
+            <Segmented
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: 'engaged', label: 'Engaged', count: groups.engaged.length },
+                { value: 'room', label: 'In room', count: groups.room.length },
+                { value: 'inquired', label: 'Inquired', count: groups.inquired.length },
+                { value: 'unopened', label: 'Not opened', count: groups.unopened.length },
+                { value: 'failed', label: 'Failed', count: groups.failed.length },
+                { value: 'all', label: 'All', count: groups.all.length },
+              ]}
+            />
+          </div>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a person" className="input-field sm:w-56 py-1.5" />
+        </div>
+        {shown.length === 0 && <EmptyState title="Nobody here" />}
+        {shown.map((r) => (
+          <div key={r.email} className="row items-start">
+            <Avatar name={r.name} size={32} />
+            <div className="min-w-0 flex-1">
+              {r.personId ? <Link href={`/contacts/${r.personId}`} className="text-sm hover:underline">{r.name}</Link> : <span className="text-sm">{r.name}</span>}
+              <div className="text-2xs text-gallery-mid truncate">{r.company || r.email}</div>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {r.inquiries > 0 && <span className="chip chip-accent">inquired</span>}
+                {r.roomSeconds > 0 && <span className="chip">{duration(r.roomSeconds)} in room</span>}
+                {r.room > 0 && !r.roomSeconds && <span className="chip">opened room</span>}
+                {r.artworkViews > 0 && <span className="chip">{r.artworkViews} work views</span>}
+                {r.clicks > 0 && <span className="chip">{r.clicks} click{r.clicks > 1 ? 's' : ''}</span>}
+                {r.opens > 0 && <span className="chip">opened {r.opens}×</span>}
+                {r.failed && !r.sent && <span className="chip text-gallery-danger">failed</span>}
+              </div>
+              {r.artworks.length > 0 && <div className="text-2xs text-gallery-light mt-1 truncate">{r.artworks.slice(0, 4).join(' · ')}</div>}
+            </div>
+            <div className="text-2xs text-gallery-light shrink-0 text-right">
+              {r.lastActivity ? timeAgo(r.lastActivity) : r.sent ? 'no activity' : ''}
+              {r.devices.length > 0 && <div>{r.devices.join(', ')}</div>}
+            </div>
+          </div>
+        ))}
+      </section>
+    </div>
+  );
+}

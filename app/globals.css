@@ -115,3 +115,6 @@
 .prose-mail ul { list-style: disc; padding-left: 1.4em; margin: 0 0 0.9em; }
 .prose-mail ol { list-style: decimal; padding-left: 1.4em; margin: 0 0 0.9em; }
 .prose-mail a { text-decoration: underline; }
+
+/* Placeholder for contentEditable editors */
+[contenteditable][data-placeholder]:empty::before { content: attr(data-placeholder); color: #a8a49c; pointer-events: none; }

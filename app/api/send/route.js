@@ -39,6 +39,7 @@ export async function POST(request) {
       recipients,
       campaignName,
       pdfLink,
+      pdfLabel,          // Optional: text for {{pdf_link}} (default "View PDF")
       customBodies,      // Optional: { [personId]: "edited HTML" }
       campaignId: existingCampaignId,  // Optional: send to an existing campaign
       cc,                // Optional: texto libre o array, se aplica a cada correo
@@ -92,6 +93,9 @@ export async function POST(request) {
       if (pdfLink) {
         campaignFields['PDF Link'] = pdfLink;
       }
+      if (pdfLabel) {
+        campaignFields['PDF Label'] = pdfLabel;
+      }
 
       campaign = await createCampaign(campaignFields);
     }
@@ -120,6 +124,7 @@ export async function POST(request) {
       bodyTemplate,
       recipients: actualRecipients,
       pdfLink: pdfLink || null,
+      pdfLabel: pdfLabel || campaign['PDF Label'] || null,
       customBodies: customBodies || null,
       cc: cc || null,
       bcc: bcc || null,
@@ -141,8 +146,9 @@ export async function POST(request) {
       'Failed Count': totalFailed,
     });
 
-    // 5. Link new people to the campaign's People field
-    if (existingCampaignId) {
+    // 5. Link new people to the campaign's People field. 2.0: also for the
+    //    first batch of a new campaign (1.x only linked later additions).
+    {
       const existingPeople = campaign.People || [];
       const newPeopleIds = actualRecipients
         .filter((r) => r.id && !existingPeople.includes(r.id))

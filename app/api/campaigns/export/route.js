@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getCampaigns, getEventsForCampaign } from '@/lib/airtable';
+import { getCampaigns } from '@/lib/airtable';
+import { getDeliveryEvents } from '@/lib/events';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,7 @@ export async function GET() {
   try {
     const [campaigns, allEvents] = await Promise.all([
       getCampaigns(),
-      getEventsForCampaign(null),
+      getDeliveryEvents(), // 2.0: all history, not the newest 5,000
     ]);
 
     const eventsByCampaign = {};
