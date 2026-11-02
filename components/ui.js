@@ -129,18 +129,19 @@ export function Stat({ label, value, hint }) {
 }
 
 // Artwork thumbnail served by the viewing rooms (rooms.diez.gallery/api/image)
-export function ArtworkThumb({ id, title, size = 56, className = '' }) {
-  if (!id) {
-    return <div className={`bg-gallery-bg border border-gallery-border flex-shrink-0 ${className}`} style={{ width: size, height: size }} />;
-  }
+export function ArtworkThumb({ id, title, size = 56, fluid = false, className = '' }) {
+  const style = fluid ? undefined : { width: size, height: size };
+  const cls = `${fluid ? 'w-full aspect-square' : ''} object-cover bg-gallery-bg border border-gallery-border flex-shrink-0 ${className}`;
+  if (!id) return <div className={cls} style={style} />;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`https://rooms.diez.gallery/api/image?id=${encodeURIComponent(id)}&size=${size > 64 ? 'large' : 'large'}`}
+      src={`https://rooms.diez.gallery/api/image?id=${encodeURIComponent(id)}&size=large`}
       alt={title || ''}
       loading="lazy"
-      className={`object-cover bg-gallery-bg border border-gallery-border flex-shrink-0 ${className}`}
-      style={{ width: size, height: size }}
+      onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+      className={cls}
+      style={style}
     />
   );
 }

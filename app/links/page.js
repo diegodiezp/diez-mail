@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import PeopleTabs from '@/components/PeopleTabs';
+import { PageHeader } from '@/components/ui';
 
 function formatDate(iso) {
   if (!iso) return '-';
@@ -13,7 +16,9 @@ function formatDate(iso) {
   });
 }
 
-export default function LinksPage() {
+function LinksContent() {
+  const searchParams = useSearchParams();
+  const presetPerson = searchParams.get('person');
   const [people, setPeople] = useState([]);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [search, setSearch] = useState('');
@@ -34,9 +39,17 @@ export default function LinksPage() {
   const [loadingRecent, setLoadingRecent] = useState(true);
 
   useEffect(() => {
-    fetch('/api/contacts')
+    fetch('/api/contacts?lite=1')
       .then((r) => r.json())
-      .then((data) => setPeople(data.people || []))
+      .then((data) => {
+        const list = data.people || [];
+        setPeople(list);
+        // 2.0: the person page links here with ?person=<id>
+        if (presetPerson) {
+          const p = list.find((x) => x.id === presetPerson);
+          if (p) setSelectedPerson(p);
+        }
+      })
       .catch(() => {})
       .finally(() => setLoadingPeople(false));
 
@@ -139,16 +152,12 @@ export default function LinksPage() {
 
   return (
     <div>
-      <h1 className="font-serif italic text-3xl mb-2">Manual Links</h1>
-      <p className="text-sm text-gallery-mid mb-8">
-        Generate a tracked link to share by hand, over WhatsApp or anywhere else.
-        Clicks and any activity that follows in the viewing room are logged the
-        same way as if they came from an email campaign.
-      </p>
+      <PageHeader title="People" sub="Tracked links: share by hand, over WhatsApp or anywhere else. Clicks and viewing-room activity are logged as if they came from a campaign." />
+      <PeopleTabs />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Form */}
-        <form onSubmit={handleGenerate} className="border border-gallery-border bg-gallery-white p-6">
+        <form onSubmit={handleGenerate} className="card p-5 sm:p-6">
           <div className="mb-4 relative">
             <label className="block text-2xs font-medium uppercase tracking-wider text-gallery-mid mb-1.5">
               Contact
@@ -309,5 +318,13 @@ export default function LinksPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LinksPage() {
+  return (
+    <Suspense fallback={null}>
+      <LinksContent />
+    </Suspense>
   );
 }
