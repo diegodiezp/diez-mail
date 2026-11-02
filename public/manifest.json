@@ -1,11 +1,11 @@
 {
   "name": "Diez Mail",
   "short_name": "Diez Mail",
-  "description": "Email campaigns for Diez Gallery",
+  "description": "Collectors, signals and campaigns for diez gallery",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fafafa",
-  "theme_color": "#1a1a1a",
+  "background_color": "#f7f6f3",
+  "theme_color": "#ffffff",
   "orientation": "any",
   "icons": [
     {
@@ -19,6 +19,38 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Today",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Fair mode",
+      "url": "/fair",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "New campaign",
+      "url": "/campaigns/new",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

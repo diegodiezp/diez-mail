@@ -40,7 +40,10 @@ export async function GET(request) {
       .sort((a, b) => new Date(a.date) - new Date(b.date));
 
     const urgentDue = due.filter((d) => d.overdue || d.today).length;
-    const count = signals.length + urgentDue;
+    // The badge counts what needs you: strong signals (room visits, works
+    // looked at, inquiries) plus next actions due today or overdue. Opens and
+    // clicks still show on Today under "Warming up", without inflating it.
+    const count = signals.filter((s) => s.rank >= 4).length + urgentDue;
 
     if (summary) return NextResponse.json({ count });
 

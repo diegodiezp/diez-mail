@@ -150,7 +150,7 @@ export default function PersonPage() {
             <h1 className="page-title">{name}</h1>
             <div className="mt-1 text-sm text-gallery-mid flex flex-wrap gap-x-2">
               {c.Company && <span>{c.Company}</span>}
-              {c.City && <span>· {c.City}</span>}
+              {c.City && <span>{c.Company ? '· ' : ''}{c.City}</span>}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {types.map((t) => <span key={t} className="chip">{t}</span>)}

@@ -189,6 +189,7 @@ export default function ActivityFeed() {
   const [today, setToday] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
+  const [daysShown, setDaysShown] = useState(3);
 
   useEffect(() => {
     const cached = readCache();
@@ -245,6 +246,10 @@ export default function ActivityFeed() {
   for (const dg of dayGroups) {
     dg.cards = collapse(dg.items);
   }
+  // The full history is kept (cached days load instantly), but only the most
+  // recent days render until asked: in Today's sidebar a year of opens would
+  // otherwise make the page tens of thousands of pixels tall.
+  const shownGroups = dayGroups.slice(0, daysShown);
 
   return (
     <div>
@@ -263,7 +268,7 @@ export default function ActivityFeed() {
             <p className="text-sm text-gallery-light">Engagement will appear here as recipients open and click.</p>
           </div>
         ) : (
-          dayGroups.map((group) => (
+          shownGroups.map((group) => (
             <div key={group.key}>
               <div className="px-4 sm:px-5 py-2 bg-gallery-bg border-b border-gallery-border text-2xs font-medium uppercase tracking-wider text-gallery-mid">
                 {group.key}
@@ -338,6 +343,11 @@ export default function ActivityFeed() {
           ))
         )}
       </div>
+      {!loading && dayGroups.length > daysShown && (
+        <button type="button" className="btn-secondary w-full mt-3 justify-center" onClick={() => setDaysShown((n) => n + 7)}>
+          Show older days
+        </button>
+      )}
     </div>
   );
 }

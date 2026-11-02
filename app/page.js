@@ -10,6 +10,8 @@ import PushToggle from '@/components/PushToggle';
 import { PageHeader, Segmented, Avatar, Dot, EmptyState, SkeletonRows, ArtworkThumb, Icon } from '@/components/ui';
 import { signalOf, timeAgo, dueLabel, duration } from '@/lib/format';
 
+const PAGE = 8;
+
 function todayTitle() {
   return new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 }
@@ -193,6 +195,10 @@ export default function TodayPage() {
     catch (e) { flash(e.message); }
   };
 
+  // Long lists bury the point of Today: the strongest few go first, the rest
+  // load on request. Opens and clicks stay folded until asked for.
+  const [hotShown, setHotShown] = useState(PAGE);
+  const [warmShown, setWarmShown] = useState(0);
   const hot = useMemo(() => (data?.signals || []).filter((s) => s.rank >= 4), [data]);
   const warm = useMemo(() => (data?.signals || []).filter((s) => s.rank < 4), [data]);
   const urgentDue = (data?.due || []).filter((d) => d.overdue || d.today).length;
@@ -223,7 +229,7 @@ export default function TodayPage() {
           value={view}
           onChange={setView}
           options={[
-            { value: 'signals', label: 'Signals', count: data?.signals?.length || 0 },
+            { value: 'signals', label: 'Signals', count: hot.length },
             { value: 'due', label: 'Due', count: urgentDue },
             { value: 'activity', label: 'Activity' },
           ]}
@@ -247,16 +253,26 @@ export default function TodayPage() {
             <div>
               <h2 className="eyebrow mb-3">Act now · {hot.length}</h2>
               <div className="space-y-3">
-                {hot.map((s) => <SignalCard key={s.key} s={s} onDone={onDone} onSnooze={onSnooze} />)}
+                {hot.slice(0, hotShown).map((s) => <SignalCard key={s.key} s={s} onDone={onDone} onSnooze={onSnooze} />)}
               </div>
+              {hot.length > hotShown && (
+                <button type="button" className="btn-secondary w-full mt-3 justify-center" onClick={() => setHotShown((n) => n + PAGE)}>
+                  Show {Math.min(PAGE, hot.length - hotShown)} more of {hot.length - hotShown}
+                </button>
+              )}
             </div>
           )}
           {warm.length > 0 && (
             <div>
               <h2 className="eyebrow mb-3">Warming up · {warm.length}</h2>
               <div className="space-y-3">
-                {warm.map((s) => <SignalCard key={s.key} s={s} onDone={onDone} onSnooze={onSnooze} />)}
+                {warm.slice(0, warmShown).map((s) => <SignalCard key={s.key} s={s} onDone={onDone} onSnooze={onSnooze} />)}
               </div>
+              {warm.length > warmShown && (
+                <button type="button" className="btn-secondary w-full mt-3 justify-center" onClick={() => setWarmShown((n) => n + PAGE)}>
+                  {warmShown === 0 ? `Show ${warm.length} opens and clicks` : `Show ${Math.min(PAGE, warm.length - warmShown)} more of ${warm.length - warmShown}`}
+                </button>
+              )}
             </div>
           )}
         </section>

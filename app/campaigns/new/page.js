@@ -32,19 +32,19 @@ function FormatToolbar({ editorRef, onChange, onInsert }) {
     document.execCommand(cmd, false, value);
     onChange?.();
   };
-  const btn = 'h-8 min-w-8 px-2 text-sm text-gallery-dark hover:bg-gallery-bg transition-colors';
+  const btn = 'h-8 min-w-8 px-2 shrink-0 whitespace-nowrap text-sm text-gallery-dark hover:bg-gallery-bg transition-colors';
   return (
     <div className="flex items-center gap-0.5 px-3 sm:px-5 py-1.5 border-b border-gallery-border overflow-x-auto no-scrollbar">
       <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('bold'); }} className={`${btn} font-bold`} title="Bold">B</button>
       <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('italic'); }} className={`${btn} italic`} title="Italic">I</button>
       <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('underline'); }} className={`${btn} underline`} title="Underline">U</button>
-      <span className="w-px h-5 bg-gallery-border mx-1" />
+      <span className="w-px h-5 shrink-0 bg-gallery-border mx-1" />
       <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('insertUnorderedList'); }} className={btn} title="Bullets">• List</button>
       <button type="button" onMouseDown={(e) => { e.preventDefault(); const url = window.prompt('Link URL'); if (url) exec('createLink', /^https?:\/\//.test(url) ? url : `https://${url}`); }} className={btn} title="Link">Link</button>
       <button type="button" onMouseDown={(e) => { e.preventDefault(); exec('removeFormat'); }} className={btn} title="Clear formatting">Clear</button>
-      <span className="w-px h-5 bg-gallery-border mx-1" />
+      <span className="w-px h-5 shrink-0 bg-gallery-border mx-1" />
       {MERGE_TAGS.map((m) => (
-        <button key={m.tag} type="button" onMouseDown={(e) => { e.preventDefault(); onInsert(m.tag); }} className="h-7 px-2 mx-0.5 text-2xs bg-gallery-accent-light text-gallery-accent whitespace-nowrap" title={m.tag}>
+        <button key={m.tag} type="button" onMouseDown={(e) => { e.preventDefault(); onInsert(m.tag); }} className="h-7 px-2 mx-0.5 shrink-0 text-2xs bg-gallery-accent-light text-gallery-accent whitespace-nowrap" title={m.tag}>
           {m.label}
         </button>
       ))}
@@ -563,7 +563,7 @@ function ComposerContent() {
         <button type="button" className="btn-primary btn-sm" disabled={!selected.size} onClick={toReview}>Review</button>
       </div>
 
-      <div className="flex h-[calc(100dvh-56px-50px-76px)] sm:h-[calc(100dvh-56px)]">
+      <div className="flex h-[calc(100dvh-56px-50px-76px-env(safe-area-inset-bottom))] sm:h-[calc(100dvh-56px)]">
         {/* Recipients */}
         <aside className={`${pane === 'recipients' ? 'flex' : 'hidden'} sm:flex w-full sm:w-[320px] lg:w-[340px] shrink-0 flex-col border-r border-gallery-border bg-gallery-white min-h-0`}>
           <RecipientPicker

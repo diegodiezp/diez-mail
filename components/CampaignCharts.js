@@ -152,7 +152,7 @@ export function OpensOverTime({ data = [] }) {
               y={H + 16}
               textAnchor="middle"
               fontSize={9}
-              fill="#b0b0b0"
+              fill="#a8a49c"
               fontFamily="DM Sans, sans-serif"
             >
               {i}:00
@@ -257,7 +257,7 @@ function Donut({ value, max, color, label }) {
   return (
     <div className="flex flex-col items-center gap-1.5">
       <svg width={64} height={64} viewBox="0 0 64 64">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e0e0e0" strokeWidth={6} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e6e3dd" strokeWidth={6} />
         <circle
           cx={cx}
           cy={cy}
@@ -275,7 +275,7 @@ function Donut({ value, max, color, label }) {
           textAnchor="middle"
           fontSize={11}
           fontWeight={500}
-          fill="#1a1a1a"
+          fill="#171717"
           fontFamily="DM Sans, sans-serif"
         >
           {Math.round(pct * 100)}%
@@ -296,11 +296,11 @@ export function EngagementSummary({ stats }) {
       <SubLabel>Of total recipients sent</SubLabel>
       <div className="flex justify-around pt-1">
         <Donut value={uniqueOpens} max={sent} color="#c45a3c" label="Opened" />
-        <Donut value={uniqueClicks} max={sent} color="#3a7d44" label="Clicked" />
+        <Donut value={uniqueClicks} max={sent} color="#171717" label="Clicked" />
         <Donut
           value={sent - uniqueOpens}
           max={sent}
-          color="#b0b0b0"
+          color="#a8a49c"
           label="No open"
         />
       </div>

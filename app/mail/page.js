@@ -416,7 +416,7 @@ function MailPageContent() {
 
   return (
     <div
-      className="flex flex-col sm:flex-row -mx-4 -mt-6 sm:-mx-6 sm:-mt-6 h-[calc(100dvh-86px)] sm:h-[calc(100vh-64px)]"
+      className="flex flex-col sm:flex-row -mx-4 -my-6 sm:-mx-6 sm:-my-8 h-[calc(100dvh-56px-76px-env(safe-area-inset-bottom))] sm:h-[calc(100dvh-56px)]"
       style={{ overflow: 'hidden' }}
     >
       {/* ── LEFT: Thread list ──────────────────────────────────────────── */}
